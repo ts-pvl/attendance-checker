@@ -1,0 +1,67 @@
+{{define "content"}}
+{{with .D}}
+<h1>{{t "anom.title"}}</h1>
+<form method="get" class="filters">
+  <label>{{t "c.from"}} <input type="date" name="from" value="{{.From}}"></label>
+  <label>{{t "c.to"}} <input type="date" name="to" value="{{.To}}"></label>
+  <button>{{t "c.show"}}</button>
+</form>
+
+<h2>{{t "anom.latency"}} <span class="count">{{len .Slow}}</span></h2>
+<p class="muted">{{t "anom.latency_hint" (dur .Latency)}}</p>
+{{if .Slow}}
+<div class="scroll"><table>
+  <thead><tr><th>{{t "c.when"}}</th><th>{{t "c.student"}}</th><th>{{t "c.pc"}}</th><th>{{t "c.details"}}</th></tr></thead>
+  <tbody>{{range .Slow}}
+  <tr><td>{{dt .At}}</td><td><a href="/admin/students/{{.Student.ID}}">{{.Student.Name}}</a></td><td>{{.Host}}</td>
+    <td>{{t "student.latency" (ms .LatencyMs)}}{{if .Stale}} · {{t "student.stale"}}{{end}}</td></tr>
+  {{end}}</tbody>
+</table></div>
+{{end}}
+
+<h2>{{t "anom.multi_pc"}} <span class="count">{{len .Multi}}</span></h2>
+<p class="muted">{{t "anom.multi_pc_hint" (dur .Window)}}</p>
+{{if .Multi}}
+<div class="scroll"><table>
+  <thead><tr><th>{{t "c.student"}}</th><th>{{t "anom.first_pc"}}</th><th>{{t "anom.second_pc"}}</th></tr></thead>
+  <tbody>{{range .Multi}}
+  <tr><td><a href="/admin/students/{{.Student.ID}}">{{.Student.Name}}</a></td>
+    <td>{{.FirstHost}} {{dt .FirstAt}} → {{clock .FirstActiveUntil}}</td>
+    <td>{{.SecondHost}} {{dt .SecondAt}}</td></tr>
+  {{end}}</tbody>
+</table></div>
+{{end}}
+
+<h2>{{t "anom.many"}} <span class="count">{{len .Many}}</span></h2>
+<p class="muted">{{t "anom.many_hint"}}</p>
+{{if .Many}}
+<div class="scroll"><table>
+  <thead><tr><th>{{t "c.pc"}}</th><th>{{t "today.session_since"}}</th><th>{{t "anom.students"}}</th></tr></thead>
+  <tbody>{{range .Many}}
+  <tr><td>{{.Host}}</td><td>{{dt .Started}}</td><td>{{range $i, $n := .Students}}{{if $i}}, {{end}}{{$n}}{{end}}</td></tr>
+  {{end}}</tbody>
+</table></div>
+{{end}}
+
+<h2>{{t "anom.auto"}} <span class="count">{{len .Auto}}</span></h2>
+<p class="muted">{{t "anom.auto_hint"}}</p>
+{{if .Auto}}
+<div class="scroll"><table>
+  <thead><tr><th>{{t "c.student"}}</th><th>{{t "c.pc"}}</th><th>{{t "c.start"}}</th><th>{{t "c.end"}}</th><th>{{t "c.duration"}}</th></tr></thead>
+  <tbody>{{range .Auto}}
+  <tr><td><a href="/admin/students/{{.StudentID}}?period=month&amp;date={{date .Start}}">{{.Student.Name}}</a></td><td>{{.Host}}</td><td>{{dt .Start}}</td><td>{{dt .End}}</td><td>{{dur .Duration}}</td></tr>
+  {{end}}</tbody>
+</table></div>
+{{end}}
+
+<h2>{{t "anom.failed"}} <span class="count">{{len .Failed}}</span></h2>
+{{if .Failed}}
+<div class="scroll"><table>
+  <thead><tr><th>{{t "c.when"}}</th><th>{{t "anom.tg_user"}}</th><th>{{t "c.pc"}}</th><th>{{t "anom.result"}}</th></tr></thead>
+  <tbody>{{range .Failed}}
+  <tr><td>{{dt .At}}</td><td>{{if .Student}}{{.Student}}{{else}}ID {{.TGUser}}{{end}}</td><td>{{.Host}}</td><td>{{t (printf "scan.%s" .Result)}}</td></tr>
+  {{end}}</tbody>
+</table></div>
+{{end}}
+{{end}}
+{{end}}

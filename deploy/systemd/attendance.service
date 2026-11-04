@@ -1,0 +1,47 @@
+[Unit]
+Description=QR attendance server and Telegram bot
+Documentation=file:///usr/local/share/doc/attendance/README.md
+Wants=network-online.target
+After=network-online.target
+# Never give up restarting: nobody watches the system overnight.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=attendance
+Group=attendance
+ExecStart=/usr/local/bin/attendance serve -config /etc/attendance/attendance.conf
+Restart=always
+RestartSec=3
+
+# Secrets stay root-only (0600) on disk; systemd hands the service a private
+# copy under $CREDENTIALS_DIRECTORY, which the config defaults point to.
+LoadCredential=bot_token:/etc/attendance/bot_token
+LoadCredential=host_key:/etc/attendance/host_key
+
+StateDirectory=attendance
+StateDirectoryMode=0750
+UMask=0027
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+ReadWritePaths=-/var/backups/attendance
+# To listen on port 80 instead of 8080, uncomment:
+#AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

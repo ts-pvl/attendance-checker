@@ -1,0 +1,15 @@
+[Unit]
+Description=Telegram alert if the attendance server is down or unhealthy
+After=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=attendance-alert
+EnvironmentFile=/etc/attendance/alert.env
+LoadCredential=bot_token:/etc/attendance/bot_token
+ExecStart=/usr/local/lib/attendance/attendance-alert
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

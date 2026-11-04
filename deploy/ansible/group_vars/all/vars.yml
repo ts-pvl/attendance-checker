@@ -1,0 +1,9 @@
+---
+attendance_server_url: "http://10.0.0.5:8080"
+attendance_bot_username: MySchoolAttendanceBot
+attendance_lang: ru
+attendance_timezone: Asia/Almaty
+attendance_browsers: [firefox, chrome, chromium]
+# Staff Telegram ids for the outage alert (each must have pressed Start in the bot;
+# the bot's /id command shows the number).
+attendance_alert_chat_ids: []

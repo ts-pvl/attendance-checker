@@ -1,0 +1,121 @@
+---
+- name: Check that the host key is set (Ansible Vault)
+  ansible.builtin.assert:
+    that:
+      - attendance_host_key is defined
+      - attendance_host_key | length >= 16
+    fail_msg: "Set attendance_host_key (at least 16 characters) in the vault. Generate one with: attendance gen-key"
+    quiet: true
+
+- name: Install tools the agent needs
+  ansible.builtin.package:
+    name: [curl, util-linux, libnotify-bin]
+    state: present
+
+- name: Config directory
+  ansible.builtin.file:
+    path: /etc/attendance
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Agent config
+  ansible.builtin.template:
+    src: agent.conf.j2
+    dest: /etc/attendance/agent.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# Readable by the generic student account on purpose (spec 10.2 item 11):
+# it lets a PC prove "a session is alive", never who is sitting there.
+- name: Host key
+  ansible.builtin.copy:
+    content: "{{ attendance_host_key }}\n"
+    dest: /etc/attendance/host_key
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+
+- name: Agent script (revised idle_logout)
+  ansible.builtin.copy:
+    src: "{{ attendance_agent_script_src }}"
+    dest: /usr/local/bin/idle_logout
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+
+# System-wide autostart, so wiped home directories cannot lose it.
+- name: Autostart entry for the agent
+  ansible.builtin.copy:
+    src: idle-logout.desktop
+    dest: /etc/xdg/autostart/idle-logout.desktop
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Autostart entry that opens the QR page after login
+  ansible.builtin.template:
+    src: attendance-qr.desktop.j2
+    dest: /etc/xdg/autostart/attendance-qr.desktop
+    owner: root
+    group: root
+    mode: "0644"
+  when: attendance_open_qr_at_login | bool
+
+- name: Remove the QR autostart entry when disabled
+  ansible.builtin.file:
+    path: /etc/xdg/autostart/attendance-qr.desktop
+    state: absent
+  when: not (attendance_open_qr_at_login | bool)
+
+- name: Firefox policy directory
+  ansible.builtin.file:
+    path: /etc/firefox/policies
+    state: directory
+    mode: "0755"
+  when: "'firefox' in attendance_browsers"
+
+- name: Firefox homepage policy (deb and snap Firefox both read this file)
+  ansible.builtin.template:
+    src: firefox-policies.json.j2
+    dest: /etc/firefox/policies/policies.json
+    mode: "0644"
+  when: "'firefox' in attendance_browsers"
+
+- name: Chrome policy directory
+  ansible.builtin.file:
+    path: /etc/opt/chrome/policies/managed
+    state: directory
+    mode: "0755"
+  when: "'chrome' in attendance_browsers"
+
+- name: Chrome homepage policy
+  ansible.builtin.template:
+    src: chrome-policy.json.j2
+    dest: /etc/opt/chrome/policies/managed/attendance.json
+    mode: "0644"
+  when: "'chrome' in attendance_browsers"
+
+- name: Chromium policy directories (Debian package and Ubuntu snap paths)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/chromium/policies/managed
+    - /etc/chromium-browser/policies/managed
+  when: "'chromium' in attendance_browsers"
+
+- name: Chromium homepage policy
+  ansible.builtin.template:
+    src: chrome-policy.json.j2
+    dest: "{{ item }}/attendance.json"
+    mode: "0644"
+  loop:
+    - /etc/chromium/policies/managed
+    - /etc/chromium-browser/policies/managed
+  when: "'chromium' in attendance_browsers"

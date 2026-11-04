@@ -1,0 +1,21 @@
+---
+# URL of the attendance server as the lab PCs reach it.
+attendance_server_url: "http://10.0.0.5:8080"
+# Shared host key; keep it in Ansible Vault (group_vars/all/vault.yml).
+# attendance_host_key: "…"
+
+# Language of the idle warning popup: ru or en.
+attendance_lang: ru
+
+# Which browsers get the QR page as their homepage: firefox, chrome, chromium.
+attendance_browsers: [firefox, chrome, chromium]
+
+# Also open the QR page automatically right after login.
+attendance_open_qr_at_login: true
+
+# Extra Firefox enterprise policies to keep in /etc/firefox/policies/policies.json
+# (this role owns that file).
+attendance_firefox_extra_policies: {}
+
+# The agent script from this repository.
+attendance_agent_script_src: "{{ playbook_dir }}/../../agent/idle_logout"

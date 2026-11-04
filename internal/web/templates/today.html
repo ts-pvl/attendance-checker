@@ -1,0 +1,67 @@
+{{define "content"}}
+<h1>{{t "today.title"}}</h1>
+<div id="live" hx-get="/admin/today/live" hx-trigger="every 15s" hx-swap="innerHTML">
+{{template "live" .}}
+</div>
+{{end}}
+
+{{define "live"}}
+{{with .D}}
+<section class="cards">
+  <div class="card"><span class="label">{{t "today.last_heartbeat"}}</span><b>{{ago .LastHeartbeat}}</b><small>{{dt .LastHeartbeat}}</small></div>
+  <div class="card"><span class="label">{{t "today.last_scan"}}</span><b>{{ago .LastScan}}</b><small>{{dt .LastScan}}</small></div>
+  {{if .Bot}}
+  <div class="card{{if .Bot.LastError}} warn{{end}}"><span class="label">{{t "today.bot_poll"}}</span><b>{{ago .Bot.LastPollOK}}</b>
+    <small>{{t "today.bot_reply"}}: {{ago .Bot.LastReply}}</small>
+    {{if .Bot.LastError}}<small class="err">{{t "today.bot_error" .Bot.LastError}} ({{ago .Bot.LastErrAt}})</small>{{end}}</div>
+  {{else}}
+  <div class="card warn"><span class="label">Telegram</span><b>{{t "today.bot_off"}}</b></div>
+  {{end}}
+  <div class="card"><span class="label">{{t "today.open_visits"}}</span><b>{{.OpenVisits}}</b></div>
+</section>
+
+<h2>{{t "today.pcs"}}</h2>
+<p class="muted">{{t "today.pcs_summary" .Live .NoCheckin}}</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>{{t "c.pc"}}</th><th>{{t "today.session_since"}}</th><th>{{t "today.heartbeat"}}</th><th>{{t "today.idle"}}</th><th>{{t "today.checked_in"}}</th></tr></thead>
+  <tbody>
+  {{range .Hosts}}
+  <tr class="{{if not .Live}}dim{{else if not .Students}}attention{{end}}">
+    <td><b>{{.Name}}</b></td>
+    {{if .Live}}
+    <td>{{clock .Started}}</td>
+    <td class="{{if .Stale}}err{{end}}">{{ago .LastSeen}}</td>
+    <td>{{if .IdleKnown}}{{dur .Idle}}{{else}}{{t "today.idle_unknown"}}{{end}}</td>
+    <td>{{range .Students}}<a href="/admin/students/{{.ID}}">{{.Name}}</a> <small class="muted">{{clock .Since}}</small><br>{{else}}<span class="tag warn">{{t "today.no_checkin"}}</span>{{end}}</td>
+    {{else}}
+    <td colspan="4" class="muted">{{if .LastEver.IsZero}}{{t "today.no_session"}}{{else}}{{t "today.last_seen" (ago .LastEver)}}{{end}}</td>
+    {{end}}
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+
+<h2>{{t "today.today_visits"}}</h2>
+{{if .Visits}}
+<div class="scroll">
+<table>
+  <thead><tr><th>{{t "c.student"}}</th><th>{{t "c.pc"}}</th><th>{{t "c.start"}}</th><th>{{t "c.end"}}</th><th>{{t "c.duration"}}</th><th>{{t "c.ended"}}</th></tr></thead>
+  <tbody>
+  {{range .Visits}}
+  <tr>
+    <td><a href="/admin/students/{{.StudentID}}">{{.Student.Name}}</a></td>
+    <td>{{.Host}}</td>
+    <td>{{clock .Start}}</td>
+    <td>{{if .Open}}<span class="tag ok">{{reason ""}}</span>{{else}}{{clock .End}}{{end}}</td>
+    <td>{{dur .Duration}}</td>
+    <td>{{if .Open}}{{else}}{{reason .EndReason}}{{end}}</td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+{{end}}
+{{end}}

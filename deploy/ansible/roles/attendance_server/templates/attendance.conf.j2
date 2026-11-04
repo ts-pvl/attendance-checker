@@ -1,0 +1,17 @@
+# Managed by Ansible (attendance_server role). See deploy/attendance.conf.example.
+listen = {{ attendance_listen }}
+db = /var/lib/attendance/attendance.db
+timezone = {{ attendance_timezone }}
+lang = {{ attendance_lang }}
+bot_username = {{ attendance_bot_username }}
+token_secret_file = /var/lib/attendance/token_secret
+hosts_file = /etc/attendance/hosts.csv
+admin_networks = {{ attendance_admin_networks }}
+admin_from_lab_pcs = {{ attendance_admin_from_lab_pcs | bool | lower }}
+cleanup_at = {{ attendance_cleanup_at }}
+backup_at = {{ attendance_backup_at }}
+backup_dir = {{ attendance_backup_dir }}
+backup_keep_days = {{ attendance_backup_keep_days }}
+hours_rounding = {{ attendance_hours_rounding }}
+hours_min_visit = {{ attendance_hours_min_visit }}
+hours_daily_cap = {{ attendance_hours_daily_cap }}

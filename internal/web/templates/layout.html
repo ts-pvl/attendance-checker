@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
+<title>{{t "app.title"}}</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/qrcode.js" defer></script>
+<script src="/static/qrsvg.js" defer></script>
+<script src="/static/admin.js" defer></script>
+</head>
+<body{{with .Staff}} hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'{{end}}>
+{{with .Staff}}
+<header class="top">
+  <nav>
+    <strong class="brand">{{t "app.title"}}</strong>
+    <a href="/admin/today" {{if eq $.Page "today"}}aria-current="page"{{end}}>{{t "nav.today"}}</a>
+    <a href="/admin/hours" {{if eq $.Page "hours"}}aria-current="page"{{end}}>{{t "nav.hours"}}</a>
+    <a href="/admin/students" {{if or (eq $.Page "students") (eq $.Page "student") (eq $.Page "slips")}}aria-current="page"{{end}}>{{t "nav.students"}}</a>
+    <a href="/admin/anomalies" {{if eq $.Page "anomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>
+    {{if .IsAdmin}}<a href="/admin/audit" {{if eq $.Page "audit"}}aria-current="page"{{end}}>{{t "nav.audit"}}</a>{{end}}
+  </nav>
+  <form method="post" action="/admin/logout" class="who">
+    <span>{{.Username}} · {{if .IsAdmin}}{{t "role.admin"}}{{else}}{{t "role.teacher"}}{{end}}</span>
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button class="link">{{t "nav.logout"}}</button>
+  </form>
+</header>
+{{end}}
+<main>
+{{if .Flash}}<p class="flash{{if .FlashErr}} err{{end}}" role="status">{{.Flash}}</p>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>

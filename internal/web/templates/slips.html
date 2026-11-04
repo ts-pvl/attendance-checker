@@ -1,0 +1,22 @@
+{{define "content"}}
+<div class="noprint">
+  <h1>{{t "students.slips"}}</h1>
+  <p class="flash">{{t "students.slips_hint"}}</p>
+  <p><button type="button" data-print>{{t "c.print"}}</button> <a href="/admin/students">← {{t "students.title"}}</a></p>
+</div>
+{{if .D}}
+<div class="slips">
+{{range .D}}
+  <div class="slip">
+    <div class="slip-qr" data-qr="{{.Link}}"></div>
+    <div>
+      <h3>{{.Student.Name}}</h3>
+      {{if .Student.Group}}<p>{{.Student.Group}}</p>{{end}}
+      <p class="mono small">{{.Link}}</p>
+      <p class="small">{{t "students.expires" (dt .Expires)}}</p>
+    </div>
+  </div>
+{{end}}
+</div>
+{{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+{{end}}

@@ -1,0 +1,124 @@
+---
+- name: Check secrets (Ansible Vault)
+  ansible.builtin.assert:
+    that:
+      - attendance_host_key is defined and attendance_host_key | length >= 16
+      - attendance_bot_token is defined and ':' in attendance_bot_token
+    fail_msg: "Set attendance_host_key and attendance_bot_token in the vault."
+    quiet: true
+
+- name: Service account
+  ansible.builtin.user:
+    name: attendance
+    system: true
+    shell: /usr/sbin/nologin
+    home: /var/lib/attendance
+    create_home: false
+
+- name: Directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: attendance
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /etc/attendance, owner: root, mode: "0750" }
+    - { path: /var/lib/attendance, owner: attendance, mode: "0750" }
+    - { path: "{{ attendance_backup_dir }}", owner: attendance, mode: "0750" }
+    - { path: /usr/local/lib/attendance, owner: root, mode: "0755" }
+
+# Keep the previous binary next to the new one: rollback is a rename and a restart.
+- name: Server binary
+  ansible.builtin.copy:
+    src: "{{ attendance_binary_src }}"
+    dest: /usr/local/bin/attendance
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  register: attendance_binary
+  notify: Restart attendance
+
+- name: Keep the previous binary as attendance.prev
+  ansible.builtin.command:
+    cmd: mv -f {{ attendance_binary.backup_file | quote }} /usr/local/bin/attendance.prev
+  when: attendance_binary.backup_file is defined
+  changed_when: true
+
+- name: Server config
+  ansible.builtin.template:
+    src: attendance.conf.j2
+    dest: /etc/attendance/attendance.conf
+    owner: root
+    group: attendance
+    mode: "0640"
+  notify: Restart attendance
+
+- name: Lab PC list (hosts.csv) from the inventory
+  ansible.builtin.template:
+    src: hosts.csv.j2
+    dest: /etc/attendance/hosts.csv
+    owner: root
+    group: attendance
+    mode: "0640"
+  # The server reloads this file within a minute; no restart needed.
+
+- name: Bot token (root-only; systemd passes it to the service)
+  ansible.builtin.copy:
+    content: "{{ attendance_bot_token }}\n"
+    dest: /etc/attendance/bot_token
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart attendance
+
+- name: Host key (root-only on the server)
+  ansible.builtin.copy:
+    content: "{{ attendance_host_key }}\n"
+    dest: /etc/attendance/host_key
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart attendance
+
+- name: Alert script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../alert/attendance-alert"
+    dest: /usr/local/lib/attendance/attendance-alert
+    mode: "0755"
+
+- name: Alert settings
+  ansible.builtin.template:
+    src: alert.env.j2
+    dest: /etc/attendance/alert.env
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: systemd units
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../systemd/{{ item }}"
+    dest: /etc/systemd/system/{{ item }}
+    mode: "0644"
+  loop:
+    - attendance.service
+    - attendance-alert.service
+    - attendance-alert.timer
+  notify: Restart attendance
+
+- name: Enable and start the server (starts at boot, restarts on failure)
+  ansible.builtin.systemd_service:
+    name: attendance.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable the alert timer
+  ansible.builtin.systemd_service:
+    name: attendance-alert.timer
+    enabled: true
+    state: started
+  when: attendance_alert_chat_ids | length > 0

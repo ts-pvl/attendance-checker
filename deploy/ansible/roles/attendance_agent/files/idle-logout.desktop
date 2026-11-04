@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Idle logout
+Comment=Logs out idle sessions and reports attendance
+Exec=/usr/local/bin/idle_logout
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

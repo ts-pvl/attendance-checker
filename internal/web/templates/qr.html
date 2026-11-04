@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{t "qr.title"}} · {{.D.Host}}</title>
+<link rel="stylesheet" href="/static/qr.css">
+<script src="/static/qrcode.js" defer></script>
+<script src="/static/qrsvg.js" defer></script>
+<script src="/static/qr.js" defer></script>
+</head>
+<body>
+<main id="qr-app" data-refresh="{{.D.Texts.refresh}}" data-offline="{{.D.Texts.offline}}">
+  <section id="qr-view" hidden>
+    <div class="code-wrap">
+      <div id="code" aria-label="QR"></div>
+      <div class="bar"><div id="bar"></div></div>
+      <p id="countdown" class="countdown"></p>
+    </div>
+    <div class="side">
+      <p class="pc">{{.D.Host}}</p>
+      <h1>{{t "qr.scan"}}</h1>
+      <p class="steps">{{t "qr.steps"}}</p>
+      <div id="checked" hidden>
+        <h2>{{t "qr.checked_in"}}</h2>
+        <ul id="checked-list"></ul>
+      </div>
+    </div>
+  </section>
+  <section id="login-view" class="message">
+    <p class="pc">{{.D.Host}}</p>
+    <h1>{{t "qr.login_first"}}</h1>
+    <p>{{t "qr.login_first_hint"}}</p>
+  </section>
+  <p id="offline" class="offline" hidden></p>
+</main>
+</body>
+</html>

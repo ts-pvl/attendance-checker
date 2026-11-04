@@ -1,0 +1,8 @@
+/dist/
+*.db
+*.db-wal
+*.db-shm
+*:Zone.Identifier
+deploy/ansible/inventory.ini
+# Only the encrypted vault belongs in git; check before committing.
+deploy/ansible/group_vars/all/vault.yml

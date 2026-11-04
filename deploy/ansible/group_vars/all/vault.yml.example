@@ -1,0 +1,9 @@
+---
+# Copy to vault.yml, fill in, then: ansible-vault encrypt group_vars/all/vault.yml
+# Never commit the unencrypted file.
+
+# Shared host key for the PC agents (generate: attendance gen-key).
+attendance_host_key: "replace-with-output-of-attendance-gen-key"
+
+# From @BotFather. Use a separate test bot while developing.
+attendance_bot_token: "123456789:replace-me"

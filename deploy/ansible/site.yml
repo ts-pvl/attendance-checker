@@ -1,0 +1,15 @@
+---
+# ansible-playbook -i inventory.ini site.yml --ask-vault-pass
+# Build the server binary first: make pi (or make amd64).
+
+- name: Attendance server
+  hosts: attendance_server
+  become: true
+  roles:
+    - attendance_server
+
+- name: Lab PCs (agent, autostart, browser homepage)
+  hosts: lab_pcs
+  become: true
+  roles:
+    - attendance_agent

@@ -1,0 +1,4 @@
+name,ip
+{% for h in groups[attendance_pc_group] | default([]) | sort %}
+{{ hostvars[h].attendance_pc_name | default(h | upper) }},{{ hostvars[h].ansible_host | default(h) }}
+{% endfor %}

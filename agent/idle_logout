@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Idle logout + attendance agent.
+#
+# Started at every login via /etc/xdg/autostart/idle-logout.desktop
+# (system-wide, so wiped profiles do not lose it). It:
+#   * logs the user out after 30 minutes of inactivity (warning at 25),
+#     reading idle time from GNOME Mutter IdleMonitor (Wayland and Xorg);
+#   * reports the PC session to the attendance server: session_start at
+#     login, a heartbeat with the idle time every HEARTBEAT_EVERY checks,
+#     idle_logout just before an idle logout, and logout when the session
+#     ends (TERM/HUP from the session manager, best effort).
+#
+# The server computes all times from its own clock; the agent only sends
+# "how long has the user been idle right now".
+#
+# Config: /etc/attendance/agent.conf (deployed by Ansible), shell syntax:
+#   SERVER_URL=http://10.0.0.5:8080
+#   HOST_KEY_FILE=/etc/attendance/host_key
+#   AGENT_LANG=ru            # ru | en, for the warning popup
+
+set -u
+
+IDLE_LIMIT_MS=1800000   # 30 minutes
+WARNING_MS=1500000      # warn at 25 minutes idle
+CHECK_INTERVAL=30       # seconds between idle checks
+HEARTBEAT_EVERY=2       # heartbeat every N checks (every 60 s)
+CONF=${IDLE_LOGOUT_CONF:-/etc/attendance/agent.conf}
+
+SERVER_URL=""
+HOST_KEY_FILE=/etc/attendance/host_key
+AGENT_LANG=ru
+# shellcheck source=/dev/null
+[[ -r "$CONF" ]] && . "$CONF"
+
+log() { logger -t idle_logout -- "$*"; }
+
+# One instance per login session.
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/idle_logout.lock"
+exec 9>"$LOCK" || exit 1
+if ! flock -n 9; then
+  log "already running, exiting"
+  exit 0
+fi
+
+HOST_KEY=""
+if [[ -n "$SERVER_URL" && -r "$HOST_KEY_FILE" ]]; then
+  HOST_KEY=$(tr -d '[:space:]' < "$HOST_KEY_FILE")
+else
+  log "attendance reporting disabled (no SERVER_URL or unreadable $HOST_KEY_FILE)"
+fi
+
+# Session id: stable for this login (so a restarted agent continues the same
+# session) and different for the next login.
+BOOT_ID=$(tr -d '-' < /proc/sys/kernel/random/boot_id 2>/dev/null | cut -c1-12)
+if [[ -n "${XDG_SESSION_ID:-}" ]]; then
+  SID="${BOOT_ID:-noboot}-${XDG_SESSION_ID}"
+else
+  SID="${BOOT_ID:-noboot}-p$$-$(date +%s)"
+fi
+
+# report <kind> [idle_ms] [max_seconds] [retries]
+# The host key goes to curl on stdin, not argv, so it never shows up in ps.
+report() {
+  [[ -z "$HOST_KEY" ]] && return 0
+  local kind=$1 idle=${2:-} max=${3:-5} retries=${4:-0}
+  if ! printf 'header = "X-Host-Key: %s"\n' "$HOST_KEY" | curl --config - -fsS \
+      -m "$max" --retry "$retries" --retry-delay 1 --retry-connrefused \
+      --data-urlencode "kind=$kind" --data-urlencode "sid=$SID" --data-urlencode "idle_ms=$idle" \
+      "$SERVER_URL/event" >/dev/null 2>&1; then
+    log "report $kind failed"
+    return 1
+  fi
+}
+
+get_idle() {
+  gdbus call --session \
+    --dest org.gnome.Mutter.IdleMonitor \
+    --object-path /org/gnome/Mutter/IdleMonitor/Core \
+    --method org.gnome.Mutter.IdleMonitor.GetIdletime 2>/dev/null \
+    | awk '{print $2}' | tr -cd '0-9'
+}
+
+warn_user() {
+  local remaining=$1 title text
+  if [[ "$AGENT_LANG" == en ]]; then
+    title="Warning!"
+    text="You will be logged out in ${remaining} s because of inactivity. Move the mouse or press a key."
+  else
+    title="Внимание!"
+    text="Вы будете отключены через ${remaining} сек из-за неактивности. Подвигайте мышь или нажмите клавишу."
+  fi
+  notify-send -u critical -i dialog-warning -t 30000 "$title" "$text" 2>/dev/null || true
+}
+
+do_logout() {
+  gnome-session-quit --logout --no-prompt 2>/dev/null && return 0
+  if [[ -n "${XDG_SESSION_ID:-}" ]]; then
+    loginctl terminate-session "$XDG_SESSION_ID" 2>/dev/null && return 0
+  fi
+  loginctl terminate-session self 2>/dev/null && return 0
+  log "could not log out session ${XDG_SESSION_ID:-?}"
+  return 1
+}
+
+ended=0
+on_term() {
+  if [[ $ended -eq 0 ]]; then
+    ended=1
+    # Manual logout: the session is going away, so be quick.
+    report logout "$(get_idle)" 2 0
+    log "session ending, reported logout"
+  fi
+  exit 0
+}
+trap on_term TERM HUP INT
+
+log "started for ${USER:-?} sid=$SID limit=${IDLE_LIMIT_MS}ms warning=${WARNING_MS}ms"
+report session_start "" 5 3
+
+warned=0
+cycle=0
+while true; do
+  # sleep in the background so the TERM trap runs immediately on logout.
+  sleep "$CHECK_INTERVAL" &
+  wait $!
+
+  idle_ms=$(get_idle) || true
+  cycle=$((cycle + 1))
+  # Heartbeat even when the idle call returned nothing, so a flaky D-Bus call
+  # is not mistaken for the PC going offline.
+  if (( cycle % HEARTBEAT_EVERY == 0 )); then
+    report heartbeat "$idle_ms"
+  fi
+
+  if [[ -z "$idle_ms" ]]; then
+    continue
+  fi
+
+  if (( idle_ms < WARNING_MS )); then
+    warned=0
+    continue
+  fi
+
+  if (( idle_ms < IDLE_LIMIT_MS )) && (( warned == 0 )); then
+    remaining=$(( (IDLE_LIMIT_MS - idle_ms) / 1000 ))
+    log "idle ${idle_ms}ms, warning (${remaining}s left)"
+    warn_user "$remaining"
+    warned=1
+  fi
+
+  if (( idle_ms >= IDLE_LIMIT_MS )); then
+    log "idle ${idle_ms}ms >= ${IDLE_LIMIT_MS}ms, logging out"
+    ended=1
+    report idle_logout "$idle_ms" 5 2
+    do_logout
+    exit 0
+  fi
+done

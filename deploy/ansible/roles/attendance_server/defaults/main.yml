@@ -1,0 +1,30 @@
+---
+# Binary built with "make pi" (arm64), "make pi32" (arm) or "make amd64".
+attendance_arch: arm64
+attendance_binary_src: "{{ playbook_dir }}/../../dist/attendance-linux-{{ attendance_arch }}"
+
+attendance_listen: "0.0.0.0:8080"
+attendance_lang: ru
+attendance_timezone: Asia/Almaty
+attendance_bot_username: MySchoolAttendanceBot
+attendance_admin_networks: "127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16"
+attendance_admin_from_lab_pcs: false
+attendance_cleanup_at: "04:00"
+attendance_backup_at: "03:30"
+attendance_backup_dir: /var/backups/attendance
+attendance_backup_keep_days: 14
+attendance_hours_rounding: "0"
+attendance_hours_min_visit: "0"
+attendance_hours_daily_cap: "0"
+
+# The inventory group whose hosts are lab PCs. Each PC's address is its
+# ansible_host; its display name is attendance_pc_name (default: the
+# inventory name in upper case).
+attendance_pc_group: lab_pcs
+
+# Telegram user ids of staff who get alerts (they must have started the bot).
+attendance_alert_chat_ids: []
+
+# Secrets, from Ansible Vault:
+# attendance_bot_token: "123456:ABC…"
+# attendance_host_key: "…"

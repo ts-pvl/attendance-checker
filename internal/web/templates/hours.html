@@ -1,0 +1,52 @@
+{{define "content"}}
+{{with .D}}
+<h1>{{t "hours.title"}}</h1>
+<form method="get" class="filters">
+  <select name="period">
+    <option value="day" {{if eq .Period.Kind "day"}}selected{{end}}>{{t "hours.day"}}</option>
+    <option value="week" {{if eq .Period.Kind "week"}}selected{{end}}>{{t "hours.week"}}</option>
+    <option value="month" {{if eq .Period.Kind "month"}}selected{{end}}>{{t "hours.month"}}</option>
+  </select>
+  <input type="date" name="date" value="{{.Date}}">
+  <select name="group">
+    <option value="">{{t "c.all_groups"}}</option>
+    {{range .Groups}}<option {{if eq . $.D.Group}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <label class="inline"><input type="checkbox" name="empty" value="1" {{if .ShowEmpty}}checked{{end}}> {{t "hours.no_visits"}}</label>
+  <button>{{t "c.show"}}</button>
+</form>
+<p class="pager">
+  <a href="?{{.Prev}}">{{t "c.prev"}}</a>
+  <a href="?{{.Cur}}">{{t "c.now"}}</a>
+  <a href="?{{.Next}}">{{t "c.next"}}</a>
+  <strong>{{date .Period.From}}{{if ne .Period.Kind "day"}} – {{date (index .DayCols (add (len .DayCols) -1))}}{{end}}</strong>
+  <a class="button" href="/admin/hours.csv?{{.CSV}}">{{t "hours.csv"}}</a>
+</p>
+<p class="muted">{{t "hours.policy" .Policy}}</p>
+{{if .Rows}}
+<div class="scroll">
+<table class="num">
+  <thead><tr>
+    <th>{{t "c.student"}}</th><th>{{t "c.group"}}</th><th>{{t "hours.total"}}</th><th>{{t "hours.visits"}}</th>
+    <th>{{t "hours.first"}}</th><th>{{t "hours.last"}}</th>
+    {{if eq .Period.Kind "week"}}{{range .DayCols}}<th>{{weekday .}}</th>{{end}}{{end}}
+  </tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr>
+    <td><a href="/admin/students/{{.Student.ID}}?period=month&amp;date={{$.D.Date}}">{{.Student.Name}}</a></td>
+    <td>{{.Student.Group}}</td>
+    <td><b>{{dur .Row.Total}}</b></td>
+    <td>{{.Row.Visits}}</td>
+    <td>{{if eq $.D.Period.Kind "day"}}{{clock .Row.FirstArrival}}{{else}}{{dt .Row.FirstArrival}}{{end}}</td>
+    <td>{{if .Row.Open}}<span class="tag ok">{{t "hours.in_progress"}}</span>{{else if eq $.D.Period.Kind "day"}}{{clock .Row.LastDeparture}}{{else}}{{dt .Row.LastDeparture}}{{end}}</td>
+    {{if eq $.D.Period.Kind "week"}}{{range .Days}}<td>{{if .}}{{dur .}}{{else}}<span class="muted">·</span>{{end}}</td>{{end}}{{end}}
+  </tr>
+  {{end}}
+  </tbody>
+  <tfoot><tr><td colspan="2">{{t "hours.total"}}</td><td><b>{{dur .Total}}</b></td><td colspan="{{if eq .Period.Kind "week"}}10{{else}}3{{end}}"></td></tr></tfoot>
+</table>
+</div>
+{{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+{{end}}
+{{end}}

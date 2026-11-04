@@ -1,0 +1,27 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: fuzz token parsing
+        run: go test ./internal/token -run '^$' -fuzz FuzzParse -fuzztime 30s
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: gosec (fail on high severity)
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -severity high ./...
+      - name: shellcheck
+        run: shellcheck agent/idle_logout deploy/alert/attendance-alert
+      - name: cross-compile for the Pi
+        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/attendance

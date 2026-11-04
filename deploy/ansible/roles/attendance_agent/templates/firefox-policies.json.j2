@@ -1,0 +1,9 @@
+{{ {"policies": ({
+    "Homepage": {
+      "URL": attendance_server_url ~ "/qr",
+      "Locked": true,
+      "StartPage": "homepage"
+    },
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": ""
+  } | combine(attendance_firefox_extra_policies))} | to_nice_json(indent=2) }}

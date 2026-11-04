@@ -1,0 +1,17 @@
+{{define "content"}}
+<h1>{{t "audit.title"}}</h1>
+{{if .D}}
+<div class="scroll">
+<table>
+  <thead><tr><th>{{t "c.when"}}</th><th>{{t "c.who"}}</th><th>{{t "c.what"}}</th><th></th><th>{{t "c.details"}}</th></tr></thead>
+  <tbody>
+  {{range .D}}
+  <tr><td>{{dt .At}}</td><td>{{.Actor}}</td><td>{{.Action}}</td>
+    <td>{{if hasStudent .Target}}<a href="/admin/students/{{studentID .Target}}">{{.Target}}</a>{{else}}{{.Target}}{{end}}</td>
+    <td class="mono small">{{.Details}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+{{end}}

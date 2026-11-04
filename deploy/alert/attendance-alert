@@ -1,0 +1,61 @@
+#!/bin/sh
+# Telegram alert for staff (spec 9, "Optional alert"). Run every 5 minutes by
+# attendance-alert.timer. It asks the server's /healthz (localhost only) and
+# messages the admins when the server is unreachable, the bot cannot reach
+# Telegram, or the PCs stopped reporting mid-session. It alerts once when
+# something breaks, repeats every REPEAT_SECONDS while broken, and says so
+# when it recovers. It talks to Telegram itself, so it works while the server
+# is down.
+#
+# Environment (/etc/attendance/alert.env):
+#   ALERT_CHAT_IDS="123456789 987654321"   Telegram user ids (they must have pressed Start)
+#   HEALTH_URL=http://127.0.0.1:8080/healthz
+#   ALERT_LANG=ru|en
+set -u
+
+HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:8080/healthz}
+REPEAT_SECONDS=${REPEAT_SECONDS:-21600}
+STATE=${STATE_DIRECTORY:-/var/lib/attendance-alert}/state
+TOKEN_FILE=${CREDENTIALS_DIRECTORY:-/etc/attendance}/bot_token
+ALERT_LANG=${ALERT_LANG:-ru}
+[ -n "${ALERT_CHAT_IDS:-}" ] || { echo "ALERT_CHAT_IDS is empty, nothing to do"; exit 0; }
+
+body=$(mktemp) || exit 1
+trap 'rm -f "$body"' EXIT
+code=$(curl -sS -m 10 -o "$body" -w '%{http_code}' "$HEALTH_URL" 2>/dev/null) || code=000
+
+if [ "$code" = 200 ]; then
+  status=ok
+elif [ "$code" = 000 ]; then
+  status=bad; problem="server not reachable at $HEALTH_URL"
+else
+  status=bad
+  problem=$(sed -n 's/.*"problems":\[\(.*\)\].*/\1/p' "$body" | sed 's/","/; /g; s/^"//; s/"$//')
+  [ -n "$problem" ] || problem="HTTP $code"
+fi
+
+now=$(date +%s)
+prev=ok; sent=0
+[ -r "$STATE" ] && read -r prev sent < "$STATE"
+
+send() {
+  token=$(tr -d '[:space:]' < "$TOKEN_FILE")
+  for id in $ALERT_CHAT_IDS; do
+    # URL with the token goes through stdin, not argv.
+    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" |
+      curl -sS -m 15 --config - --data-urlencode "chat_id=$id" --data-urlencode "text=$1" -o /dev/null ||
+      echo "sending to $id failed"
+  done
+}
+
+if [ "$status" = bad ]; then
+  if [ "$prev" != bad ] || [ $((now - sent)) -ge "$REPEAT_SECONDS" ]; then
+    if [ "$ALERT_LANG" = en ]; then send "⚠️ Attendance: $problem"; else send "⚠️ Посещаемость: $problem"; fi
+    echo "bad $now" > "$STATE"
+  fi
+  echo "unhealthy: $problem"
+elif [ "$prev" = bad ]; then
+  if [ "$ALERT_LANG" = en ]; then send "✅ Attendance: working again."; else send "✅ Посещаемость: снова работает."; fi
+  echo "ok 0" > "$STATE"
+fi
+exit 0
