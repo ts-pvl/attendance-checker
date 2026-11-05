@@ -29,6 +29,30 @@ Choices made where the spec left things open are in [docs/decisions.md](docs/dec
 | Deployment | `deploy/ansible` (roles `attendance_server`, `attendance_agent`), `deploy/systemd`, `deploy/alert` |
 | Staff runbook, student instructions | `docs/` |
 
+## Quick start
+
+Needs Go 1.26+ and `curl`. From the repository root:
+
+```bash
+make dev
+```
+
+This builds the binary and creates a local setup in `.dev/` the first time
+(config, host key, an `admin` user, sample students). It starts the server and
+simulates one lab PC (this machine plays PC-01). Then open:
+
+* http://127.0.0.1:8080/admin to log in as `admin`, password `dev-password-123`
+* http://127.0.0.1:8080/qr to see the rotating check-in QR code
+
+To scan and link with a real phone, create a test bot with @BotFather and pass it in:
+
+```bash
+BOT_TOKEN=123456:your-test-token BOT_USERNAME=YourTestBot make dev
+```
+
+`Ctrl+C` stops everything. Run `rm -rf .dev` to start from scratch. `PORT`
+and `ADMIN_PASSWORD` can be overridden the same way.
+
 ## How it works
 
 * **Identity** is the Telegram account. Each student links it once with a

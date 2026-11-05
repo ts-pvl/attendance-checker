@@ -2,10 +2,13 @@ VERSION ?= $(shell date +%Y.%m.%d)-$(shell git rev-parse --short HEAD 2>/dev/nul
 LDFLAGS := -s -w -X main.version=$(VERSION)
 BUILD   := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
-.PHONY: build pi pi32 amd64 all test race fuzz load check vet staticcheck vuln gosec shellcheck clean
+.PHONY: dev build pi pi32 amd64 all test race fuzz load check vet staticcheck vuln gosec shellcheck clean
 
 build:
 	$(BUILD) -o dist/attendance ./cmd/attendance
+
+dev: build  ## run everything locally (see scripts/dev.sh)
+	./scripts/dev.sh
 
 pi:      ## Raspberry Pi / ARM mini PC, 64-bit OS
 	GOOS=linux GOARCH=arm64 $(BUILD) -o dist/attendance-linux-arm64 ./cmd/attendance
