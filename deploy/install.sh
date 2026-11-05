@@ -172,10 +172,13 @@ if [[ -n "$FROM_DIR" ]]; then
 elif command -v gh >/dev/null && gh auth status -h github.com >/dev/null 2>&1 \
      && gh repo view "$REPO" --json name >/dev/null 2>&1; then
   info "using the GitHub CLI login"
-  [[ -n "$TAG" ]] || TAG=$(gh release view -R "$REPO" --json tagName -q .tagName) || die "no release found in $REPO"
+  [[ -n "$TAG" ]] || TAG=$(gh release view -R "$REPO" --json tagName -q .tagName < /dev/null) || die "no release found in $REPO"
   args=()
   for f in "${NEEDED[@]}"; do args+=(-p "$f"); done
-  gh release download "$TAG" -R "$REPO" -D "$DL" "${args[@]}" || die "download of $TAG failed"
+  # Piped and without stdin: on a terminal gh sends terminal queries whose
+  # answers would eat the user's typed input.
+  gh release download "$TAG" -R "$REPO" -D "$DL" "${args[@]}" < /dev/null 2>&1 | sed 's/^/    /' \
+    || die "download of $TAG failed"
 else
   # Private repository: a token with read access to its contents is needed.
   # It goes to curl in a 0600 file, never on the command line, and is not kept.
