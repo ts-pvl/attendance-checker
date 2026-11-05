@@ -44,6 +44,12 @@ simulates one lab PC (this machine plays PC-01). Then open:
 * http://127.0.0.1:8080/admin to log in as `admin`, password `dev-password-123`
 * http://127.0.0.1:8080/qr to see the rotating check-in QR code
 
+**WSL 2:** a browser on Windows connects through the WSL address and arrives
+from the Windows host, so `make dev` detects WSL and adjusts. It listens on
+all interfaces, lets only the Windows host into admin, and makes the Windows
+host play PC-01. The simulated agent sends its events with Windows `curl.exe`.
+Use the URLs it prints (`http://<WSL address>:8080/...`), not `localhost`.
+
 To scan and link with a real phone, create a test bot with @BotFather and pass it in:
 
 ```bash

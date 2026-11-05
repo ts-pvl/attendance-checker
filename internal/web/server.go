@@ -115,7 +115,10 @@ func securityHeaders(h http.Handler) http.Handler {
 		hd := w.Header()
 		hd.Set("X-Content-Type-Options", "nosniff")
 		hd.Set("X-Frame-Options", "DENY")
-		hd.Set("Referrer-Policy", "no-referrer")
+		// Not "no-referrer": with it, browsers send "Origin: null" on form
+		// POSTs and the login's same-origin check refuses every login.
+		// same-origin still sends nothing to other sites (t.me links).
+		hd.Set("Referrer-Policy", "same-origin")
 		hd.Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "+
 				"connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")

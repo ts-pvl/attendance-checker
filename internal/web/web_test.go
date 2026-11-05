@@ -276,6 +276,22 @@ func TestLoginThrottling(t *testing.T) {
 	if w.Code != 403 {
 		t.Errorf("cross-origin login: %d", w.Code)
 	}
+	// "Origin: null" (what browsers send under Referrer-Policy: no-referrer)
+	// is refused, so the policy must let the real origin through.
+	w = ts.do(req{method: "POST", path: "/admin/login", ip: staffIP, header: map[string]string{"Origin": "null"},
+		form: url.Values{"username": {"boss"}, "password": {"correct horse battery"}}})
+	if w.Code != 403 {
+		t.Errorf("Origin null login: %d", w.Code)
+	}
+	if got := w.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Errorf("Referrer-Policy = %q, want same-origin", got)
+	}
+	// A browser on the same origin logs in.
+	w = ts.do(req{method: "POST", path: "/admin/login", ip: staffIP, header: map[string]string{"Origin": "http://example.com"},
+		form: url.Values{"username": {"boss"}, "password": {"correct horse battery"}}})
+	if w.Code != 303 {
+		t.Errorf("same-origin login: %d", w.Code)
+	}
 }
 
 func TestHealth(t *testing.T) {
