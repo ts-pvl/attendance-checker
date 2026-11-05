@@ -8,8 +8,10 @@
   roles:
     - attendance_server
 
+# The PC group comes from attendance_pc_group (default lab_pcs); deploy/install.sh
+# sets it to the "students" group of the admin PC's existing inventory.
 - name: Lab PCs (agent, autostart, browser homepage)
-  hosts: lab_pcs
+  hosts: "{{ attendance_pc_group | default('lab_pcs') }}"
   become: true
   roles:
     - attendance_agent

@@ -259,12 +259,20 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("qr_token_ttl must not exceed 2m")
 	case c.HeartbeatTimeout < time.Minute:
 		return fmt.Errorf("heartbeat_timeout must be at least 1m")
-	case c.HostKeyFile == "":
-		return fmt.Errorf("host_key_file is required")
 	case len(c.AdminNetworks) == 0:
 		return fmt.Errorf("admin_networks must not be empty")
 	}
 	return nil
+}
+
+// ReadHostKey reads the PC host key. Only the server needs it, so Validate
+// does not require host_key_file: the other CLI commands (user, students,
+// code, backup, …) run outside systemd, where the credential default is empty.
+func (c *Config) ReadHostKey() (string, error) {
+	if c.HostKeyFile == "" {
+		return "", fmt.Errorf("host_key_file is not set (under systemd it comes from LoadCredential=host_key)")
+	}
+	return ReadSecret(c.HostKeyFile)
 }
 
 // ReadSecret reads a secret file and trims surrounding whitespace.

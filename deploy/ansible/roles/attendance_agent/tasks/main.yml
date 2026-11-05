@@ -119,3 +119,86 @@
     - /etc/chromium/policies/managed
     - /etc/chromium-browser/policies/managed
   when: "'chromium' in attendance_browsers"
+
+# ── overlayroot ────────────────────────────────────────────────────────────
+# Lab PCs that boot with overlayroot keep / in RAM: everything above is lost
+# at reboot and the original files come back from the read-only lower disk.
+# Write the same files to the lower disk too, through overlayroot-chroot.
+- name: Detect overlayroot
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      [ "$(findmnt -n -o FSTYPE /)" = overlay ] || exit 0
+      command -v overlayroot-chroot >/dev/null || exit 0
+      findmnt -n -o OPTIONS / | tr ',' '\n' | sed -n 's/^lowerdir=//p' | cut -d: -f1
+  register: attendance_overlay
+  changed_when: false
+
+- name: Install the agent's tools on the lower disk (overlayroot)
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      lower={{ attendance_overlay.stdout | quote }}
+      missing=""
+      for p in curl util-linux libnotify-bin; do
+        st=$(dpkg-query --admindir="$lower/var/lib/dpkg" -W -f='${db:Status-Status}' "$p" 2>/dev/null || true)
+        [ "$st" = installed ] || missing="$missing $p"
+      done
+      [ -n "$missing" ] || { echo unchanged; exit 0; }
+      overlayroot-chroot sh -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $missing"
+      echo changed
+  register: attendance_overlay_pkgs
+  changed_when: "'changed' in attendance_overlay_pkgs.stdout_lines"
+  when: attendance_overlay.stdout != ""
+
+- name: Copy the agent files to the lower disk (overlayroot)
+  ansible.builtin.shell:
+    cmd: |
+      set -eu
+      lower={{ attendance_overlay.stdout | quote }}
+      # Files this role writes. A missing one that is ours by name (the QR
+      # autostart turned off) is removed from the lower
+      # disk as well; shared files such as the Firefox policies.json never are.
+      files="{{ attendance_overlay_files | join(' ') }}"
+      differs() {  # $1 = path; true if live and lower copies differ
+        [ -e "$lower$1" ] || return 0
+        cmp -s "$1" "$lower$1" || return 0
+        [ "$(stat -c %a:%u:%g "$1")" != "$(stat -c %a:%u:%g "$lower$1")" ]
+      }
+      copy="" remove=""
+      for f in $files; do
+        if [ -e "$f" ]; then
+          if differs "$f"; then copy="$copy ${f#/}"; fi
+        elif [ -e "$lower$f" ]; then
+          case "$f" in *attendance*) remove="$remove $f" ;; esac
+        fi
+      done
+      [ -n "$copy$remove" ] || { echo unchanged; exit 0; }
+      # The first time a file on the lower disk is replaced, keep the original
+      # as <file>.orig (e.g. the old idle_logout), so it can be restored by hand.
+      # GNOME autostart and the browsers ignore the .orig names.
+      backup=""
+      for f in $copy; do
+        case "$f" in etc/attendance/*) continue ;; esac
+        if [ -e "$lower/$f" ] && [ ! -e "$lower/$f.orig" ]; then backup="$backup /$f"; fi
+      done
+      if [ -n "$backup" ]; then
+        # shellcheck disable=SC2016
+        overlayroot-chroot sh -c 'for f; do cp -p "$f" "$f.orig"; done' sh $backup
+      fi
+      if [ -n "$copy" ]; then
+        # shellcheck disable=SC2086
+        tar -C / -cf - $copy | overlayroot-chroot tar -xpf - -C /
+      fi
+      if [ -n "$remove" ]; then
+        # shellcheck disable=SC2086
+        overlayroot-chroot rm -f $remove
+      fi
+      # Check that it really landed: overlayroot-chroot must pass stdin through.
+      for f in $copy; do
+        if differs "/$f"; then echo "not written to the lower disk: /$f" >&2; exit 1; fi
+      done
+      echo changed
+  register: attendance_overlay_sync
+  changed_when: "'changed' in attendance_overlay_sync.stdout_lines"
+  when: attendance_overlay.stdout != ""

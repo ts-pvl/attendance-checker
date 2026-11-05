@@ -77,7 +77,7 @@ func New(ctx context.Context, cfg *config.Config, opts Options, log *slog.Logger
 		db.Close()
 		return nil, fmt.Errorf("token secret: %w", err)
 	}
-	hostKey, err := config.ReadSecret(cfg.HostKeyFile)
+	hostKey, err := cfg.ReadHostKey()
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("host key: %w", err)

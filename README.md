@@ -126,6 +126,44 @@ then open http://127.0.0.1:8080/qr.
 
 ## Deploy
 
+### From the admin PC (one script)
+
+On the Ubuntu admin PC, as the user that normally runs Ansible for the lab:
+
+1. Create the bot with @BotFather.
+2. Download `install.sh` from the latest
+   [release](https://github.com/ts-pvl/attendance-checker/releases) (you are
+   logged in to GitHub in the browser), or with `gh release download -R ts-pvl/attendance-checker -p install.sh`.
+3. Run it:
+
+```bash
+chmod +x install.sh && ./install.sh
+```
+
+It asks for sudo once and does the following:
+
+* Downloads the release, using the GitHub CLI login or a read-only token you
+  paste. The token is not saved. It checks the SHA256 sums.
+* Installs Ansible if needed and installs the server on this PC under systemd,
+  so it starts at boot.
+* Generates `hosts.csv` from your existing inventory (`hosts.yml`, group
+  `students`). It asks for the bot token, which it checks with Telegram, and
+  creates the first admin account.
+* Deploys the agent to the lab PCs after a confirmation. Use `--limit TS-A01`
+  to try one PC first. The PCs boot with overlayroot, so the files are also
+  written to the disk with `overlayroot-chroot`. The old `idle_logout` is kept
+  as `idle_logout.orig`.
+
+Run it again to upgrade. It remembers the answers in
+`/etc/attendance/install.env`; `--reconfigure` asks again. PCs that were off
+are listed with the command to retry them. Run `./install.sh --help` for all
+options.
+
+To publish a release: commit, then `make release` and
+`gh release create vYYYY.MM.DD dist/attendance-linux-* dist/attendance-deploy.tar.gz dist/install.sh dist/SHA256SUMS`.
+
+### By hand with Ansible
+
 1. Create the bot with @BotFather (plus a separate test bot for development).
 2. Build: `make pi` (or `make amd64`).
 3. Copy `deploy/ansible/inventory.example.ini` to `inventory.ini` and list the

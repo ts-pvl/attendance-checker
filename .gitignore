@@ -7,3 +7,5 @@
 deploy/ansible/inventory.ini
 # Only the encrypted vault belongs in git; check before committing.
 deploy/ansible/group_vars/all/vault.yml
+# The admin PC's real Ansible inventory (copied in for reference); not for git.
+/admin_ansible/

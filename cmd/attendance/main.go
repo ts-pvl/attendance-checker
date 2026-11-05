@@ -173,7 +173,7 @@ func checkConfig(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := config.ReadSecret(cfg.HostKeyFile); err != nil {
+	if _, err := cfg.ReadHostKey(); err != nil {
 		return fmt.Errorf("host key: %w", err)
 	}
 	if cfg.BotTokenFile != "" {

@@ -19,3 +19,16 @@ attendance_firefox_extra_policies: {}
 
 # The agent script from this repository.
 attendance_agent_script_src: "{{ playbook_dir }}/../../agent/idle_logout"
+
+# Files the role writes; on overlayroot PCs they are also written to the
+# read-only lower disk so they survive a reboot.
+attendance_overlay_files:
+  - /etc/attendance/agent.conf
+  - /etc/attendance/host_key
+  - /usr/local/bin/idle_logout
+  - /etc/xdg/autostart/idle-logout.desktop
+  - /etc/xdg/autostart/attendance-qr.desktop
+  - /etc/firefox/policies/policies.json
+  - /etc/opt/chrome/policies/managed/attendance.json
+  - /etc/chromium/policies/managed/attendance.json
+  - /etc/chromium-browser/policies/managed/attendance.json

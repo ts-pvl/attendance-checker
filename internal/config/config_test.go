@@ -37,6 +37,18 @@ admin_from_lab_pcs = true
 	}
 }
 
+// The CLI (user add, students import, …) runs outside systemd, where there is
+// no host key credential; only serve and check-config need the key.
+func TestHostKeyOnlyNeededByServer(t *testing.T) {
+	c, err := Load(write(t, "bot_username = b\n"))
+	if err != nil {
+		t.Fatalf("config without host_key_file rejected: %v", err)
+	}
+	if _, err := c.ReadHostKey(); err == nil || !strings.Contains(err.Error(), "host_key_file is not set") {
+		t.Errorf("ReadHostKey without host_key_file: %v", err)
+	}
+}
+
 func TestLoadRejects(t *testing.T) {
 	base := "bot_username = b\nhost_key_file = /k\n"
 	cases := map[string]string{
