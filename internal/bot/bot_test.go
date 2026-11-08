@@ -183,6 +183,29 @@ func TestNotifyOnIdleLogout(t *testing.T) {
 	}
 }
 
+func TestPreviousStudentIsToldWhenReplaced(t *testing.T) {
+	e := newBotEnv(t)
+	ctx := context.Background()
+	e.db.Exec("INSERT INTO students(id, name, grp, created_at) VALUES(2, 'Bob Jones', 'A', 0)")
+	e.db.Exec("INSERT INTO telegram_links(student_id, tg_user_id, linked_at) VALUES(1, 777, 0), (2, 888, 0)")
+	e.ci.Engine.AgentEvent(ctx, e.now, "PC-17", core.KindSessionStart, "s", sql.NullInt64{})
+	tok, _ := e.ci.Board.Current(1, e.now)
+	e.send(777, "private", "/start "+tok)
+	e.now = e.now.Add(time.Minute)
+	tok, _ = e.ci.Board.Current(1, e.now)
+	if got := e.send(888, "private", "/start "+tok); got != "Checked in at PC-17 ✅" {
+		t.Errorf("reply to the new student: %q", got)
+	}
+	select {
+	case m := <-e.b.queue:
+		if m.chatID != 777 || m.text != "Checked out at 14:00 (PC-17, another student checked in on this PC). Today: 0 min." {
+			t.Errorf("notification: %+v", m)
+		}
+	default:
+		t.Fatal("no notification queued")
+	}
+}
+
 func TestParseCommand(t *testing.T) {
 	cases := map[string][2]string{
 		"/start abc":           {"/start", "abc"},

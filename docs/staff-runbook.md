@@ -42,8 +42,9 @@ the same numbers in a spreadsheet. Visits that cross midnight are split
 between the two days.
 
 **Anomalies** (weekly). Slow or old-code scans can mean a photo or a streamed
-screen. *One student on several PCs* can mean a lent Telegram account. Several
-students on one PC is allowed for pair programming but worth a look.
+screen. *One student on several PCs* can mean a lent Telegram account. *Several
+students on one PC session* means a new check-in ended the previous student's
+visit: usually a swap without logging out, but worth a look.
 *Auto-closed* visits were still open at 04:00, so check their end time. *Failed
 scans* shows rejected attempts.
 

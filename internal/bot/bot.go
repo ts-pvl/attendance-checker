@@ -273,6 +273,7 @@ func (b *Bot) scan(ctx context.Context, now time.Time, tgUser int64, tok string)
 		if r.Moved != nil {
 			msg += "\n" + b.t("bot.moved", r.Moved.Host, b.clock(r.Moved.End))
 		}
+		b.Notify(ctx, r.Displaced) // the students this scan replaced get no reply of their own
 		return msg, nil
 	case core.ScanAlready:
 		return b.t("bot.already_in", r.Host), nil
@@ -356,8 +357,8 @@ func (b *Bot) statusText(ctx context.Context, now time.Time, tgUser int64) (stri
 }
 
 // Notify queues a message for every visit that closed on its own (idle
-// logout, logout, timeout, nightly cleanup). Scans and /checkout already
-// reply directly.
+// logout, logout, timeout, nightly cleanup, another student taking over the
+// PC). The student who scans or sends /checkout already gets a direct reply.
 func (b *Bot) Notify(ctx context.Context, closures []core.Closure) {
 	for _, c := range closures {
 		if c.Reason == core.ReasonMoved || c.Reason == core.ReasonCheckout {

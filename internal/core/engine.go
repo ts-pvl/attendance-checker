@@ -13,6 +13,8 @@
 //   - Idle logout / logout close the session; visits close at last activity.
 //   - A student has at most one open visit. A scan on another PC closes the
 //     earlier visit at that PC's last activity.
+//   - A PC session has at most one student. A scan by another student on the
+//     same PC closes the earlier student's visit at the PC's last activity.
 //   - A visit never ends before it started.
 package core
 
@@ -48,7 +50,8 @@ const (
 	ReasonReplaced   = "replaced" // a new login on the PC arrived without an end event
 	ReasonAutoClosed = "auto_closed"
 	ReasonCheckout   = "checkout"
-	ReasonMoved      = "moved" // the student checked in on another PC
+	ReasonMoved      = "moved"      // the student checked in on another PC
+	ReasonTakenOver  = "taken_over" // another student checked in on this PC
 	ReasonManual     = "manual"
 )
 
@@ -438,6 +441,11 @@ func (e *Engine) applyScan(ctx context.Context, tx *sql.Tx, ev *Event) ([]Closur
 		}
 		closures = append(closures, Closure{PresenceID: cur.ID, StudentID: ev.StudentID, Host: cur.Host, Start: cur.Confirmed, End: end, Reason: ReasonMoved})
 	}
+	taken, err := takeOver(ctx, tx, s, ev)
+	if err != nil {
+		return nil, "", err
+	}
+	closures = append(closures, taken...)
 	_, err = tx.ExecContext(ctx, `INSERT INTO presence(id, student_id, host, session_id, confirmed_at, scan_latency_ms, stale_token)
 		VALUES(?, ?, ?, ?, ?, ?, ?)`,
 		ev.ID, ev.StudentID, ev.Host, s.ID, store.Ms(ev.At), ev.Detail.LatencyMs, ev.Detail.Stale)
@@ -445,6 +453,39 @@ func (e *Engine) applyScan(ctx context.Context, tx *sql.Tx, ev *Event) ([]Closur
 		return nil, "", err
 	}
 	return closures, ScanOK, nil
+}
+
+// takeOver closes the visits of other students on session s. Each ends at the
+// PC's last activity, but never before it started or after this scan.
+func takeOver(ctx context.Context, tx *sql.Tx, s *session, ev *Event) ([]Closure, error) {
+	rows, err := tx.QueryContext(ctx,
+		"SELECT id, student_id, confirmed_at FROM presence WHERE session_id = ? AND ended_at IS NULL AND student_id <> ? ORDER BY id",
+		s.ID, ev.StudentID)
+	if err != nil {
+		return nil, err
+	}
+	var out []Closure
+	for rows.Next() {
+		c := Closure{Host: s.Host, Reason: ReasonTakenOver}
+		var conf int64
+		if err := rows.Scan(&c.PresenceID, &c.StudentID, &conf); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		c.Start = store.FromMs(conf)
+		c.End = clamp(s.LastActivity, c.Start, ev.At)
+		out = append(out, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, c := range out {
+		if err := closePresence(ctx, tx, c.PresenceID, c.End, ReasonTakenOver); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (e *Engine) applyCheckout(ctx context.Context, tx *sql.Tx, ev *Event) ([]Closure, string, error) {

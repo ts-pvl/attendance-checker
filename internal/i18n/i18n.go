@@ -66,6 +66,7 @@ var messages = map[string][2]string{
 	"reason.auto_closed": {"nightly auto-close", "ночное автозакрытие"},
 	"reason.checkout":    {"checked out in Telegram", "уход отмечен в Telegram"},
 	"reason.moved":       {"checked in on another PC", "отметка на другом компьютере"},
+	"reason.taken_over":  {"another student checked in on this PC", "на этом компьютере отметился другой ученик"},
 	"reason.manual":      {"manual", "вручную"},
 	"reason.open":        {"in progress", "идёт"},
 
@@ -265,7 +266,7 @@ var messages = map[string][2]string{
 	"anom.multi_pc":      {"One student on several PCs", "Один ученик на нескольких ПК"},
 	"anom.multi_pc_hint": {"Checked in on a second PC within %s while the first PC was still in use. Can mean a lent Telegram account.", "Отметка на втором ПК в пределах %s, пока первый ещё использовался. Может означать, что аккаунт Telegram передали другому."},
 	"anom.many":          {"Several students on one PC session", "Несколько учеников в одном сеансе ПК"},
-	"anom.many_hint":     {"Allowed for pair programming, but worth a look.", "Допустимо при парном программировании, но стоит проверить."},
+	"anom.many_hint":     {"Each new check-in ended the previous student's visit. Normal when students swap without logging out, but worth a look.", "Каждая новая отметка закрывала посещение предыдущего ученика. Обычно это смена ученика без выхода из системы, но стоит проверить."},
 	"anom.auto":          {"Auto-closed visits", "Автоматически закрытые посещения"},
 	"anom.auto_hint":     {"Closed by the nightly cleanup. Check that the end time is right.", "Закрыты ночной очисткой. Проверьте время окончания."},
 	"anom.failed":        {"Failed scans", "Неудачные сканы"},

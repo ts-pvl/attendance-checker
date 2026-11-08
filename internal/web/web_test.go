@@ -336,7 +336,7 @@ func TestTemplateKeysExist(t *testing.T) {
 			t.Errorf("missing scan.%s", r)
 		}
 	}
-	for _, r := range []string{core.ReasonIdleLogout, core.ReasonLogout, core.ReasonTimeout, core.ReasonReplaced, core.ReasonAutoClosed, core.ReasonCheckout, core.ReasonMoved, core.ReasonManual} {
+	for _, r := range []string{core.ReasonIdleLogout, core.ReasonLogout, core.ReasonTimeout, core.ReasonReplaced, core.ReasonAutoClosed, core.ReasonCheckout, core.ReasonMoved, core.ReasonTakenOver, core.ReasonManual} {
 		if !i18n.Has("reason." + r) {
 			t.Errorf("missing reason.%s", r)
 		}

@@ -15,7 +15,7 @@ implementation does. Each item says where to change it.
 ## Spec recommendations followed
 
 * One open visit per student. A new scan on another PC closes the earlier visit at that PC's last activity (10.2 #2).
-* Two students on one PC session are allowed and flagged on the Anomalies page (10.2 #3).
+* **No pair programming** (changes 10.2 #3). One PC session has one student at a time. When another student scans on the same PC, the earlier student's visit closes at the PC's last activity (reason "another student checked in on this PC"), the new visit starts, and the earlier student is told in Telegram. Sessions where this happened are listed on the Anomalies page. The rule is in the replay path, so running `attendance replay` also applies it to visits recorded while pairs were allowed.
 * `/checkout` is included (10.2 #4). It records "now" if the PC was active in the last 2 minutes (`checkout_slack`). Otherwise it records the last activity, so `/checkout` sent from the bus does not add the trip home.
 * Teachers have read-only access. Admins can edit, correct, unlink and see the audit log (10.2 #6).
 * The host key is readable under the shared student profile (10.2 #11). Lab PCs are still refused on the admin UI.
@@ -37,7 +37,7 @@ implementation does. Each item says where to change it.
 * **Session id** = boot id + `XDG_SESSION_ID`. An agent that restarts inside the same login continues the same session. A new login on the same PC while the old one still looks alive closes the old visits as "PC restarted".
 * **Deterministic timeout.** A session is dead once more than 3 minutes pass between its events, whether or not the periodic sweep has run. This makes live processing and `replay` give identical results.
 * **A heartbeat without an idle time** (flaky D-Bus call) keeps the session alive but does not move the last activity forward.
-* **QR tokens.** The format is `c` + base64url(version, host id, issue second, 6-byte nonce, 12-byte HMAC-SHA256), 35 characters. Tokens rotate every 30 s, are accepted for 60 s, and rotate immediately after use so a pair-programming partner gets a fresh code. Valid but superseded codes are accepted and flagged "old code".
+* **QR tokens.** The format is `c` + base64url(version, host id, issue second, 6-byte nonce, 12-byte HMAC-SHA256), 35 characters. Tokens rotate every 30 s, are accepted for 60 s, and rotate immediately after use so the next student at that PC gets a fresh code. Valid but superseded codes are accepted and flagged "old code".
 * **Scan checks run in this order:** signature → known host → age → account linked → single use → live session. An unlinked phone does not burn a code.
 * **Admin UI hardening.** Lab PCs cannot reach `/admin` (`admin_from_lab_pcs`). Logins are throttled (5 failures in 15 min lock the IP and the username for 15 min). Sessions use HttpOnly SameSite=Strict cookies with a 2 h idle and 12 h absolute timeout. POSTs need a CSRF token. The Content-Security-Policy allows no inline script.
 * **Backups** use SQLite `VACUUM INTO` at 03:30, 14 copies kept. Copy `/var/backups/attendance` to another machine for real off-site safety.

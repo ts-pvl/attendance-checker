@@ -13,7 +13,7 @@ import (
 
 // QRBoard tracks the token currently shown on each PC. It rotates tokens
 // every rotate interval and immediately after one is used, so the next
-// student at the same PC (pair programming) gets a fresh code.
+// student at the same PC gets a fresh code.
 type QRBoard struct {
 	signer *token.Signer
 	rotate time.Duration
@@ -99,7 +99,9 @@ type ScanReply struct {
 	Result  string // one of the Scan* constants
 	Host    string
 	Student *Student
-	Moved   *Closure // the earlier visit this scan closed, if any
+	Moved   *Closure // the scanner's earlier visit on another PC, if this scan closed one
+	// Displaced lists the visits of other students on this PC that the scan closed.
+	Displaced []Closure
 }
 
 // Scan handles "/start <token>" from Telegram user tgUserID.
@@ -142,8 +144,11 @@ func (c *Checkin) Scan(ctx context.Context, now time.Time, tgUserID int64, tok s
 	c.Board.Consume(host.ID, ev.Detail.Nonce)
 	r := ScanReply{Result: ev.Result, Host: host.Name, Student: st}
 	for i := range closures {
-		if closures[i].Reason == ReasonMoved {
+		switch closures[i].Reason {
+		case ReasonMoved:
 			r.Moved = &closures[i]
+		case ReasonTakenOver:
+			r.Displaced = append(r.Displaced, closures[i])
 		}
 	}
 	return r, nil

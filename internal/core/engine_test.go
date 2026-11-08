@@ -3,6 +3,8 @@ package core
 import (
 	"testing"
 	"time"
+
+	"attendance/internal/store"
 )
 
 // Each scenario is a scripted sequence of PC and phone events with the
@@ -66,16 +68,93 @@ func TestDoubleScanSamePC(t *testing.T) {
 	e.wantVisits(visit{alice, "PC-01", T("10:01"), time.Time{}, ""})
 }
 
-func TestTwoStudentsOnOnePC(t *testing.T) {
+func TestNewStudentReplacesPreviousOnSamePC(t *testing.T) {
 	e := newEnv(t)
 	e.start(T("10:00"), "PC-01", "s1")
 	e.scan(T("10:01"), "PC-01", tgAlice)
-	e.scan(T("10:02"), "PC-01", tgBob) // pair programming: allowed (and flagged on the anomaly page)
-	e.activeUntil("PC-01", "s1", T("10:03"), T("11:29"), T("11:00"))
-	e.agent(T("11:30"), "PC-01", KindIdleLogout, "s1", idle(1_800_000))
+	e.activeUntil("PC-01", "s1", T("10:02"), T("10:30"), T("10:30"))
+	r := e.scan(T("10:31"), "PC-01", tgBob)
+	if r.Result != ScanOK || r.Moved != nil {
+		t.Fatalf("scan: %+v", r)
+	}
+	// Alice's visit ends at the PC's last activity (10:30), not at Bob's scan.
+	if len(r.Displaced) != 1 || r.Displaced[0].StudentID != alice || r.Displaced[0].Host != "PC-01" ||
+		!r.Displaced[0].Start.Equal(T("10:01")) || !r.Displaced[0].End.Equal(T("10:30")) || r.Displaced[0].Reason != ReasonTakenOver {
+		t.Fatalf("displaced: %+v", r.Displaced)
+	}
 	e.wantVisits(
-		visit{alice, "PC-01", T("10:01"), T("11:00"), ReasonIdleLogout},
-		visit{bob, "PC-01", T("10:02"), T("11:00"), ReasonIdleLogout},
+		visit{alice, "PC-01", T("10:01"), T("10:30"), ReasonTakenOver},
+		visit{bob, "PC-01", T("10:31"), time.Time{}, ""},
+	)
+	// The login goes on; its end closes only Bob's visit.
+	e.activeUntil("PC-01", "s1", T("10:32"), T("11:29"), T("11:00"))
+	cl := e.agent(T("11:30"), "PC-01", KindIdleLogout, "s1", idle(1_800_000))
+	if len(cl) != 1 || cl[0].StudentID != bob {
+		t.Fatalf("closures at logout: %+v", cl)
+	}
+	e.wantVisits(
+		visit{alice, "PC-01", T("10:01"), T("10:30"), ReasonTakenOver},
+		visit{bob, "PC-01", T("10:31"), T("11:00"), ReasonIdleLogout},
+	)
+}
+
+func TestPreviousStudentCanTakeThePCBack(t *testing.T) {
+	e := newEnv(t)
+	e.start(T("10:00"), "PC-01", "s1")
+	e.scan(T("10:01"), "PC-01", tgAlice)
+	e.activeUntil("PC-01", "s1", T("10:02"), T("10:10"), T("10:10"))
+	e.scan(T("10:11"), "PC-01", tgBob)
+	e.activeUntil("PC-01", "s1", T("10:12"), T("10:20"), T("10:20"))
+	e.scan(T("10:21"), "PC-01", tgAlice)
+	e.wantVisits(
+		visit{alice, "PC-01", T("10:01"), T("10:10"), ReasonTakenOver},
+		visit{bob, "PC-01", T("10:11"), T("10:20"), ReasonTakenOver},
+		visit{alice, "PC-01", T("10:21"), time.Time{}, ""},
+	)
+}
+
+func TestScanClosesOwnOtherPCAndPreviousStudent(t *testing.T) {
+	e := newEnv(t)
+	e.start(T("10:00"), "PC-01", "s1")
+	e.start(T("10:00"), "PC-02", "s2")
+	e.scan(T("10:01"), "PC-01", tgAlice)
+	e.scan(T("10:02"), "PC-02", tgBob)
+	for at := T("10:03"); !at.After(T("10:15")); at = at.Add(time.Minute) {
+		e.activeUntil("PC-01", "s1", at, at, T("10:14"))
+		e.activeUntil("PC-02", "s2", at, at, T("10:15"))
+	}
+	r := e.scan(T("10:16"), "PC-01", tgBob)
+	if r.Moved == nil || r.Moved.Host != "PC-02" || !r.Moved.End.Equal(T("10:15")) {
+		t.Fatalf("moved: %+v", r.Moved)
+	}
+	if len(r.Displaced) != 1 || r.Displaced[0].StudentID != alice {
+		t.Fatalf("displaced: %+v", r.Displaced)
+	}
+	e.wantVisits(
+		visit{alice, "PC-01", T("10:01"), T("10:14"), ReasonTakenOver},
+		visit{bob, "PC-02", T("10:02"), T("10:15"), ReasonMoved},
+		visit{bob, "PC-01", T("10:16"), time.Time{}, ""},
+	)
+}
+
+// Visits opened by the earlier pair-programming rule may still be open when
+// the server is upgraded: a new scan closes all of them.
+func TestScanClosesEveryOpenVisitOfThatSession(t *testing.T) {
+	e := newEnv(t)
+	e.start(T("10:00"), "PC-01", "s1")
+	e.scan(T("10:01"), "PC-01", tgAlice)
+	if _, err := e.db.Exec(`INSERT INTO presence(id, student_id, host, session_id, confirmed_at, scan_latency_ms, stale_token)
+		SELECT 1000000, ?, host, session_id, ?, 0, 0 FROM presence WHERE student_id = ?`, bob, store.Ms(T("10:02")), alice); err != nil {
+		t.Fatal(err)
+	}
+	e.activeUntil("PC-01", "s1", T("10:03"), T("10:10"), T("10:10"))
+	if r := e.scan(T("10:11"), "PC-01", tgCarol); len(r.Displaced) != 2 {
+		t.Fatalf("displaced: %+v", r.Displaced)
+	}
+	e.wantVisits(
+		visit{alice, "PC-01", T("10:01"), T("10:10"), ReasonTakenOver},
+		visit{carol, "PC-01", T("10:11"), time.Time{}, ""},
+		visit{bob, "PC-01", T("10:02"), T("10:10"), ReasonTakenOver},
 	)
 }
 
