@@ -8,6 +8,7 @@ build:
 	$(BUILD) -o dist/attendance ./cmd/attendance
 
 dev: build  ## run everything locally (see scripts/dev.sh)
+	$(BUILD) -o dist/devseed ./cmd/devseed
 	./scripts/dev.sh
 
 pi:      ## Raspberry Pi / ARM mini PC, 64-bit OS

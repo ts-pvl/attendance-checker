@@ -38,7 +38,10 @@ make dev
 ```
 
 This builds the binary and creates a local setup in `.dev/` the first time
-(config, host key, an `admin` user, sample students). It starts the server and
+(config, host key, an `admin` user, sample students). It also adds four weeks of
+invented attendance on PC-01…PC-12, so the admin UI has data to show. The data
+is made with `cmd/devseed` through the normal events, once per `.dev/`;
+`SEED=0 make dev` skips it. It starts the server and
 simulates one lab PC (this machine plays PC-01). Then open:
 
 * http://127.0.0.1:8080/admin to log in as `admin`, password `dev-password-123`
