@@ -107,7 +107,7 @@ svg .hit { fill: transparent; }
 svg .hit:hover { fill: var(--accent); }
 
 /* matrix */
-.legend { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.legend { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-left: 6px; }
 .legend .b0, svg .b0 { background: var(--b0); fill: var(--b0); }
 .legend .b1, svg .b1 { background: var(--b1); fill: var(--b1); }
@@ -235,7 +235,10 @@ table.list tr.deleted td { opacity: .5; text-decoration: line-through; }
 .days { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; margin: 0 0 10px; }
 .days small { color: var(--muted); }
 #nstudents.htmx-request, #matrix-block.htmx-request { opacity: .55; transition: opacity .15s; }
-.c-head .tools form { display: flex; gap: 8px; align-items: center; margin: 0; }
+.c-head .tools form { display: flex; gap: 8px; align-items: center; margin: 0; flex-wrap: wrap; }
+.c-head .tools .date { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; font-size: 12px; color: var(--muted); }
+.c-head .tools .date input { background: none; border: 0; color: var(--text); font: inherit; font-size: 12px; }
+.matrix-period { margin: -2px 0 8px; }
 
 /* printable link slips */
 .slips { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }

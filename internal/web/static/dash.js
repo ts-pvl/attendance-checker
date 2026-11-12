@@ -38,7 +38,7 @@
   // The dashboard's date/status filter reloads the page: keep the list
   // settings as they are now (htmx may have changed them since the page
   // loaded), but start both lists on their first page.
-  var KEEP = ['group', 'q', 'sort', 'dir', 'per', 'mper'];
+  var KEEP = ['group', 'q', 'sort', 'dir', 'per', 'mper', 'mfrom', 'mto'];
   document.addEventListener('submit', function (e) {
     var f = e.target;
     if (!f.querySelector('[data-keep]') && !f.hasAttribute('data-keep-url')) return;

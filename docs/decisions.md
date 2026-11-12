@@ -48,7 +48,7 @@ implementation does. Each item says where to change it.
 * **`keepalive.yml` defeats idle detection.** The admin playbook that injects mouse movement every 60 s makes the agent see constant activity. While it runs, idle time counts as presence. Use it only when attendance does not matter (exams, demos).
 * **CLI outside systemd.** `host_key_file` is required only by `serve` and `check-config`. The other commands (`user add`, `students import`, `code`, …) run with `sudo -u attendance attendance … -config /etc/attendance/attendance.conf`, where the systemd credential directory does not exist.
 * **Analytics dashboard (new UI, in development).** `/admin/dashboard` sits next to the existing admin pages. A *Dashboard | Admin* switch at the top right of both moves between them and remembers the choice for the next login. It is read-only, open to teachers, and built from the same `hours.Load` + `Calc.Summarize` as the Hours screen (`internal/dash`). Its definitions are not in the spec:
-  * The default period is the last 28 days.
+  * The default period is the current week, Monday to Sunday. The attendance matrix has its own period, chosen in its card, which defaults to the current month. The Anomalies tab also defaults to the current week.
   * A *school day* is a day on which any student was present.
   * A student is *active* if they were present on one of the last 3 days of the period (ending today at most) and are not archived; otherwise they have *left*. "Active now" on the Students card is that count.
   * *Attendance* is days present / school days, and the dashboard shows the average over students.

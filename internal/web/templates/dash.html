@@ -64,6 +64,8 @@
         <form id="m-form" method="get" action="/admin/dashboard"
               hx-get="/admin/dashboard" hx-target="#matrix-block" hx-select="#matrix-block" hx-select-oob="#students-table"
               hx-swap="outerHTML" hx-push-url="true" hx-indicator="#matrix-block" hx-trigger="submit, change">
+          <label class="date"><span>{{t "dash.from"}}</span><input type="date" name="mfrom" value="{{$d.Matrix.From}}" aria-label="{{t "dash.matrix"}}: {{t "dash.from"}}"></label>
+          <label class="date"><span>{{t "dash.to"}}</span><input type="date" name="mto" value="{{$d.Matrix.To}}" aria-label="{{t "dash.matrix"}}: {{t "dash.to"}}"></label>
           {{template "per-select" (perSelect "mper" $d.Matrix.PerOpts)}}
           <noscript><button class="btn">{{t "dash.show"}}</button></noscript>
         </form>
@@ -99,6 +101,7 @@
 <div id="matrix-block" hx-boost="true" hx-target="#matrix-block" hx-select="#matrix-block" hx-select-oob="#students-table"
      hx-swap="outerHTML" hx-indicator="#matrix-block">
   {{range $k, $vs := .Keep}}{{range $vs}}<input type="hidden" name="{{$k}}" value="{{.}}" form="m-form">{{end}}{{end}}
+  <p class="sub matrix-period">{{.Period}}</p>
   {{if .Empty}}<p class="muted">{{t "dash.empty"}}</p>{{else}}
   <div class="matrix-wrap">
   <svg class="matrix" viewBox="0 0 {{printf "%.0f" .W}} {{printf "%.0f" .H}}" role="img" aria-label="{{t "dash.matrix"}}">

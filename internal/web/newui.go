@@ -220,17 +220,8 @@ func (s *Server) handleNewAnomalies(w http.ResponseWriter, r *http.Request) {
 func (s *Server) newAnomalies(r *http.Request) (*nAnomData, error) {
 	ctx := r.Context()
 	loc := s.Cfg.Timezone
-	to := s.Calc.PeriodAt("day", s.Now()).To
-	from := to.AddDate(0, 0, -7)
-	if t, err := time.ParseInLocation("2006-01-02", r.URL.Query().Get("from"), loc); err == nil {
-		from = t
-	}
-	if t, err := time.ParseInLocation("2006-01-02", r.URL.Query().Get("to"), loc); err == nil {
-		to = t.AddDate(0, 0, 1)
-	}
-	if to.Before(from) {
-		from, to = to.AddDate(0, 0, -1), from.AddDate(0, 0, 1)
-	}
+	from, last := s.dateRange(r.URL.Query(), "from", "to", s.Calc.PeriodAt("week", s.Now())) // default: this week
+	to := s.Calc.DayStart(last.AddDate(0, 0, 1).Add(12 * time.Hour))
 	c := s.Cfg
 	d := &nAnomData{From: from.Format("2006-01-02"), To: to.AddDate(0, 0, -1).Format("2006-01-02"),
 		Gap: c.AnomalyLowActivityGap, LongVisit: c.AnomalyLongVisit,

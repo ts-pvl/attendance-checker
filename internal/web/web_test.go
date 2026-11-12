@@ -392,8 +392,8 @@ func TestDashboard(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "\n1,Alice,A,active,1.00,1,100.0,1.00,1,08:00,2026-03-10,") {
 		t.Errorf("CSV:\n%s", w.Body)
 	}
-	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, "attendance-2026-02-11-2026-03-10.csv") {
-		t.Errorf("default period is the last 28 days: %s", cd)
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, "attendance-2026-03-09-2026-03-15.csv") {
+		t.Errorf("default period is this week, Monday to Sunday: %s", cd)
 	}
 	w = ts.do(req{method: "GET", path: "/admin/dashboard?status=left", ip: staffIP, cookie: admin})
 	if strings.Contains(w.Body.String(), ">Alice</a>") || !strings.Contains(w.Body.String(), i18n.T(lang, "dash.empty")) {
@@ -886,5 +886,97 @@ func TestDashboardMatrixPaging(t *testing.T) {
 	frag := w.Body.String()
 	if strings.Contains(frag, "<html") || !strings.Contains(frag, `id="matrix-block"`) || !strings.Contains(frag, `id="students-table"`) {
 		t.Errorf("fragment for the matrix:\n%.300s", frag)
+	}
+}
+
+// Default dates: the page shows this week (Monday–Sunday), the attendance
+// matrix this month; the matrix's range is its own. ts.now is Tuesday
+// 2026-03-10, so the week is 03-09…03-15 and the month 03-01…03-31.
+func TestDashboardDateRanges(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := context.Background()
+	add := func(name string, day time.Time, h int) {
+		id, _ := core.AddStudent(ctx, ts.s.DB, ts.now, name, "A", "test")
+		start := day.Add(9 * time.Hour)
+		core.AddCorrection(ctx, ts.s.DB, ts.now, core.CorrectionInput{Action: "add", StudentID: id, Host: "PC-01",
+			Start: start, End: start.Add(time.Duration(h) * time.Hour), Reason: "test", Actor: "boss"})
+	}
+	loc := ts.s.Cfg.Timezone
+	day := func(s string) time.Time { d, _ := time.ParseInLocation("2006-01-02", s, loc); return d }
+	add("Неделин", day("2026-03-09"), 2)  // this week (and this month)
+	add("Марсов", day("2026-03-02"), 3)   // this month, last week
+	add("Февралев", day("2026-02-20"), 4) // February only
+	admin, _ := ts.login("boss")
+	page := func(q string) (body string, matrix, table []string) {
+		t.Helper()
+		w := ts.do(req{method: "GET", path: "/admin/dashboard?" + q, ip: staffIP, cookie: admin})
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", q, w.Code)
+		}
+		body = w.Body.String()
+		for _, m := range regexp.MustCompile(`<text class="mn"[^>]*>([^<]+)</text>`).FindAllStringSubmatch(body, -1) {
+			matrix = append(matrix, m[1])
+		}
+		for _, m := range regexp.MustCompile(`<tr data-name="([^"]+)"`).FindAllStringSubmatch(body, -1) {
+			table = append(table, m[1])
+		}
+		return
+	}
+	days := func(body string) int {
+		return len(regexp.MustCompile(`<text class="mh(?: we)?" `).FindAllString(body, -1))
+	}
+	input := func(body, name string) string {
+		m := regexp.MustCompile(`name="` + name + `" value="([^"]*)"`).FindStringSubmatch(body)
+		if m == nil {
+			return ""
+		}
+		return m[1]
+	}
+
+	body, matrix, table := page("")
+	if input(body, "from") != "2026-03-09" || input(body, "to") != "2026-03-15" {
+		t.Errorf("page dates %s–%s, want this week 2026-03-09–2026-03-15", input(body, "from"), input(body, "to"))
+	}
+	if input(body, "mfrom") != "2026-03-01" || input(body, "mto") != "2026-03-31" || days(body) != 31 {
+		t.Errorf("matrix %s–%s with %d days, want March: 31 days", input(body, "mfrom"), input(body, "mto"), days(body))
+	}
+	if strings.Join(table, ",") != "Неделин" || strings.Join(matrix, ",") != "Марсов,Неделин" {
+		t.Errorf("default: table %v (want this week's), matrix %v (want this month's, most hours first)", table, matrix)
+	}
+
+	// The matrix's own range changes only the matrix…
+	body, matrix, table = page("mfrom=2026-02-01&mto=2026-02-28")
+	if strings.Join(matrix, ",") != "Февралев" || days(body) != 28 || strings.Join(table, ",") != "Неделин" {
+		t.Errorf("matrix in February: matrix %v (%d days), table %v", matrix, days(body), table)
+	}
+	// …and the page's range changes everything but the matrix.
+	body, matrix, table = page("from=2026-03-02&to=2026-03-08")
+	if strings.Join(table, ",") != "Марсов" || strings.Join(matrix, ",") != "Марсов,Неделин" || days(body) != 31 {
+		t.Errorf("last week: table %v, matrix %v (%d days)", table, matrix, days(body))
+	}
+	// Reversed dates are swapped.
+	if _, matrix, _ = page("mfrom=2026-02-28&mto=2026-02-01"); strings.Join(matrix, ",") != "Февралев" {
+		t.Errorf("reversed matrix dates: %v", matrix)
+	}
+	// Links keep both ranges: the table's links carry the matrix's dates and
+	// the matrix's links the page's dates.
+	body, _, _ = page("from=2026-03-02&to=2026-03-08&mfrom=2026-02-01&mto=2026-02-28&per=1&mper=1")
+	for _, link := range regexp.MustCompile(`href="(/admin/dashboard\?[^"]*)"`).FindAllStringSubmatch(body, -1) {
+		u, _ := url.Parse(strings.ReplaceAll(link[1], "&amp;", "&"))
+		q := u.Query()
+		if q.Get("mfrom") != "2026-02-01" || q.Get("mto") != "2026-02-28" || q.Get("from") != "2026-03-02" {
+			t.Errorf("link loses a date range: %s", link[1])
+		}
+	}
+}
+
+func TestAnomaliesDefaultToThisWeek(t *testing.T) {
+	ts := newTestServer(t)
+	d, err := ts.s.newAnomalies(httptest.NewRequest("GET", "/admin/new/anomalies", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.From != "2026-03-09" || d.To != "2026-03-15" {
+		t.Errorf("default %s–%s, want this week 2026-03-09–2026-03-15", d.From, d.To)
 	}
 }

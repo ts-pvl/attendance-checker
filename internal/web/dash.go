@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"html/template"
@@ -22,9 +23,8 @@ import (
 // remembers the choice in a cookie.
 
 const (
-	uiCookie        = "att_ui"
-	dashDefaultDays = 28
-	dashMaxDays     = 366
+	uiCookie    = "att_ui"
+	dashMaxDays = 366
 )
 
 // home is where "/admin/" and a fresh login go: the UI used last.
@@ -45,30 +45,34 @@ func (s *Server) handleUISwitch(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, dest, http.StatusSeeOther)
 }
 
-// dashQuery reads from / to (inclusive, YYYY-MM-DD) and status; the default
-// is the last four weeks up to today.
-func (s *Server) dashQuery(r *http.Request) (from, to time.Time, status string) {
-	q := r.URL.Query()
+// dateRange reads an inclusive range of local dates (YYYY-MM-DD) from
+// q[fromKey] and q[toKey]. A missing or invalid end comes from def (whose To
+// is exclusive), reversed dates are swapped and a range longer than
+// dashMaxDays is shortened from the start.
+func (s *Server) dateRange(q url.Values, fromKey, toKey string, def hours.Period) (from, to time.Time) {
 	loc := s.Cfg.Timezone
-	today := s.Calc.DayStart(s.Now())
-	parse := func(k string) (time.Time, bool) {
-		t, err := time.ParseInLocation("2006-01-02", q.Get(k), loc)
-		return t, err == nil
+	parse := func(k string, fallback time.Time) time.Time {
+		if t, err := time.ParseInLocation("2006-01-02", q.Get(k), loc); err == nil {
+			return t
+		}
+		return fallback
 	}
-	to, okTo := parse("to")
-	if !okTo {
-		to = today
-	}
-	from, okFrom := parse("from")
-	if !okFrom {
-		from = to.AddDate(0, 0, -(dashDefaultDays - 1))
-	}
+	from = parse(fromKey, def.From)
+	to = parse(toKey, def.To.AddDate(0, 0, -1))
 	if to.Before(from) {
 		from, to = to, from
 	}
 	if to.Sub(from) > dashMaxDays*24*time.Hour {
 		from = to.AddDate(0, 0, -(dashMaxDays - 1))
 	}
+	return from, to
+}
+
+// dashQuery reads the page's period (default: this week, Monday to Sunday)
+// and the status filter.
+func (s *Server) dashQuery(r *http.Request) (from, to time.Time, status string) {
+	q := r.URL.Query()
+	from, to = s.dateRange(q, "from", "to", s.Calc.PeriodAt("week", s.Now()))
 	switch status = q.Get("status"); status {
 	case "active", "left":
 	default:
@@ -78,23 +82,11 @@ func (s *Server) dashQuery(r *http.Request) (from, to time.Time, status string) 
 }
 
 func (s *Server) dashboard(r *http.Request) (*dash.Dashboard, url.Values, error) {
-	ctx := r.Context()
 	from, to, status := s.dashQuery(r)
-	end := to.AddDate(0, 0, 1) // exclusive
-	end = s.Calc.DayStart(end.Add(12 * time.Hour))
-	visits, err := hours.Load(ctx, s.DB, from, end, 0)
+	d, err := s.buildDash(r.Context(), from, to, status)
 	if err != nil {
 		return nil, nil, err
 	}
-	all, err := s.loadStudents(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	students := make(map[int64]dash.Student, len(all))
-	for id, st := range all {
-		students[id] = dash.Student{ID: st.ID, Name: st.Name, Group: st.Group, Archived: st.Archived}
-	}
-	d := dash.Build(visits, students, dash.Options{Calc: s.Calc, From: from, To: end, Now: s.Now(), Status: status})
 	q := url.Values{}
 	q.Set("from", from.Format("2006-01-02"))
 	q.Set("to", to.Format("2006-01-02"))
@@ -102,6 +94,24 @@ func (s *Server) dashboard(r *http.Request) (*dash.Dashboard, url.Values, error)
 		q.Set("status", status)
 	}
 	return d, q, nil
+}
+
+// buildDash computes the dashboard for the local days from…to (inclusive).
+func (s *Server) buildDash(ctx context.Context, from, to time.Time, status string) (*dash.Dashboard, error) {
+	end := s.Calc.DayStart(to.AddDate(0, 0, 1).Add(12 * time.Hour)) // exclusive
+	visits, err := hours.Load(ctx, s.DB, from, end, 0)
+	if err != nil {
+		return nil, err
+	}
+	all, err := s.loadStudents(ctx)
+	if err != nil {
+		return nil, err
+	}
+	students := make(map[int64]dash.Student, len(all))
+	for id, st := range all {
+		students[id] = dash.Student{ID: st.ID, Name: st.Name, Group: st.Group, Archived: st.Archived}
+	}
+	return dash.Build(visits, students, dash.Options{Calc: s.Calc, From: from, To: end, Now: s.Now(), Status: status}), nil
 }
 
 type kpi struct{ Label, Value, Unit, Sub string }
@@ -145,7 +155,15 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rq := r.URL.Query()
-	page := s.dashPage(d, q, parseTableOpts(rq), parseMatrixOpts(rq))
+	mo := s.parseMatrixOpts(rq)
+	// The matrix has its own period: a second dashboard over its dates, with
+	// the same status filter.
+	md, err := s.buildDash(r.Context(), mo.From, mo.To, q.Get("status"))
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	page := s.dashPage(d, md, q, parseTableOpts(rq), mo)
 	// htmx asks for the table or the matrix alone when sorting, filtering or
 	// paging; a history restore after a reload needs the whole page.
 	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-History-Restore-Request") != "true" {
@@ -158,7 +176,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "dash", page)
 }
 
-func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts, mo matrixOpts) *dashPage {
+func (s *Server) dashPage(d, md *dash.Dashboard, q url.Values, t tableOpts, mo matrixOpts) *dashPage {
 	lang, loc := s.Cfg.Lang, s.Cfg.Timezone
 	num := func(x float64, dec int) string { return i18n.Num(lang, x, dec) }
 	clock := func(d time.Duration) string {
@@ -260,7 +278,7 @@ func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts, mo matri
 
 	// The table and the matrix page separately; each keeps the other's
 	// settings in its links and forms.
-	p.Matrix = s.buildMatrix(d, mo, t.query(q, t.Page))
+	p.Matrix = s.buildMatrix(md, mo, t.query(q, t.Page))
 
 	maxH := 0.0 // the bars compare with the most hours of anyone shown, on any page
 	if n > 0 {
@@ -446,21 +464,37 @@ type matrix struct {
 	Pager        pager
 	PerOpts      []perOption
 	Keep         url.Values // the table's settings, kept by the matrix's own controls
+	From, To     string     // the matrix's period, for its date inputs
+	Period       string
 }
 
 const defaultMatrixPer = 10
 
 var matrixPerOptions = []int{10, 20, 30, 50} // plus "all"
 
-type matrixOpts struct{ Page, Per int }
+// matrixOpts: the matrix's own period (inclusive local dates; default this
+// month) and its paging.
+type matrixOpts struct {
+	Page, Per      int
+	From, To       time.Time
+	defFrom, defTo time.Time
+}
 
-func parseMatrixOpts(q url.Values) matrixOpts {
-	return matrixOpts{Page: parsePage(q.Get("mpage")), Per: parsePer(q.Get("mper"), defaultMatrixPer)}
+func (s *Server) parseMatrixOpts(q url.Values) matrixOpts {
+	month := s.Calc.PeriodAt("month", s.Now())
+	m := matrixOpts{Page: parsePage(q.Get("mpage")), Per: parsePer(q.Get("mper"), defaultMatrixPer),
+		defFrom: month.From, defTo: month.To.AddDate(0, 0, -1)}
+	m.From, m.To = s.dateRange(q, "mfrom", "mto", month)
+	return m
 }
 
 // query returns base plus the matrix settings that differ from the defaults.
 func (m matrixOpts) query(base url.Values, page int) url.Values {
 	q := cloneValues(base)
+	if !m.From.Equal(m.defFrom) || !m.To.Equal(m.defTo) {
+		q.Set("mfrom", m.From.Format("2006-01-02"))
+		q.Set("mto", m.To.Format("2006-01-02"))
+	}
 	if m.Per != defaultMatrixPer {
 		q.Set("mper", perValue(m.Per))
 	}
@@ -497,7 +531,9 @@ func (s *Server) buildMatrix(d *dash.Dashboard, mo matrixOpts, keep url.Values) 
 	n := max(len(d.Days), 1)
 	col := (width - nameW) / float64(n)
 	m := matrix{W: width, CellW: math.Max(col-gap, 2), CellH: cellH, Empty: len(d.Students) == 0, Keep: keep,
-		PerOpts: perChoices(mo.Per, matrixPerOptions, s.t("dash.per_all"))}
+		PerOpts: perChoices(mo.Per, matrixPerOptions, s.t("dash.per_all")),
+		From:    mo.From.Format("2006-01-02"), To: mo.To.Format("2006-01-02"),
+		Period: i18n.Day(lang, mo.From, true) + " — " + i18n.Day(lang, mo.To, true)}
 	// Rows in the dashboard's order (most hours first), one page at a time.
 	pg, lo, hi := paginate(len(d.Students), mo.Page, mo.Per, func(p int) string { return "/admin/dashboard?" + mo.query(keep, p).Encode() })
 	m.Pager = pg
