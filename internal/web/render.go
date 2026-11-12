@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,6 +18,19 @@ type pageTemplate = template.Template
 
 // Pages that use the admin layout; qr pages are standalone.
 var layoutPages = []string{"login", "today", "hours", "students", "student", "slips", "anomalies", "audit"}
+
+// Pages of the new admin UI (nlayout.html).
+var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanomalies", "njournal"}
+
+type anomListData struct {
+	Visits []anomVisit
+	Extra  string // "gap" adds the activity columns, "flags" the anomaly list
+}
+
+type perSelectData struct {
+	Name string
+	Opts []perOption
+}
 
 type pageData struct {
 	Lang     string
@@ -58,9 +72,17 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return i18n.T(lang, "c.ago", i18n.Duration(lang, d))
 		},
-		"ms":   func(ms int64) string { return fmt.Sprintf("%.0f s", float64(ms)/1000) },
-		"add":  func(a, b int) int { return a + b },
-		"addf": func(a, b float64) float64 { return a + b },
+		"ms":  func(ms int64) string { return fmt.Sprintf("%.0f s", float64(ms)/1000) },
+		"add": func(a, b int) int { return a + b },
+		"brand": func() string {
+			if s.Cfg.SchoolName != "" {
+				return s.Cfg.SchoolName + " - " + i18n.T(lang, "dash.analytics")
+			}
+			return i18n.T(lang, "dash.analytics")
+		},
+		"perSelect": func(name string, opts []perOption) perSelectData { return perSelectData{name, opts} },
+		"anomList":  func(v []anomVisit, extra string) anomListData { return anomListData{v, extra} },
+		"addf":      func(a, b float64) float64 { return a + b },
 		// Audit targets look like "student:12".
 		"hasStudent": func(target string) bool { return strings.HasPrefix(target, "student:") },
 		"studentID":  func(target string) string { return strings.TrimPrefix(target, "student:") },
@@ -76,7 +98,14 @@ func (s *Server) parseTemplates() error {
 		}
 		s.pages[name] = t
 	}
-	for _, name := range []string{"qr", "qr_denied", "dash"} {
+	for _, name := range newLayoutPages {
+		t, err := template.New("nlayout.html").Funcs(s.funcs()).ParseFS(templateFS, "templates/nlayout.html", "templates/"+name+".html")
+		if err != nil {
+			return fmt.Errorf("template %s: %w", name, err)
+		}
+		s.pages[name] = t
+	}
+	for _, name := range []string{"qr", "qr_denied"} {
 		t, err := template.New(name+".html").Funcs(s.funcs()).ParseFS(templateFS, "templates/"+name+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", name, err)
@@ -163,5 +192,26 @@ func back(w http.ResponseWriter, r *http.Request, fallback, msg string, isErr bo
 	if msg != "" {
 		setFlash(w, msg, isErr)
 	}
-	http.Redirect(w, r, fallback, http.StatusSeeOther)
+	http.Redirect(w, r, returnTo(r, fallback), http.StatusSeeOther)
+}
+
+// returnTo is where a form action goes back to: the page it was sent from
+// (form field "return", so the new UI stays in the new UI), if that is an
+// admin path on this site; otherwise fallback. It never leaves the site.
+func returnTo(r *http.Request, fallback string) string {
+	v := r.PostFormValue("return")
+	u, err := url.Parse(v)
+	if v == "" || err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Opaque != "" ||
+		!strings.HasPrefix(v, "/admin/") || strings.ContainsAny(v, "\\\r\n") {
+		return fallback
+	}
+	return v
+}
+
+// slipsPath: the printable link slips of the UI the request came from.
+func slipsPath(r *http.Request) string {
+	if r.PostFormValue("ui") == "new" {
+		return "/admin/new/students/slips"
+	}
+	return "/admin/students/slips"
 }

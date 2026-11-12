@@ -1,39 +1,8 @@
-<!doctype html>
-<html lang="{{.Lang}}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.D.Brand}}</title>
-<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
-<script src="/static/theme.js"></script>
-<script src="/static/htmx.min.js" defer></script>
-<link rel="stylesheet" href="/static/dash.css">
-<script src="/static/dash.js" defer></script>
-</head>
-<body class="dash">
-{{$d := .D}}
-<header class="dh">
-  <div class="dh-brand"><span class="dot" aria-hidden="true"></span>{{$d.Brand}}</div>
-  <div class="dh-right">
-    <nav class="ui-switch" aria-label="{{t "ui.switch"}}">
-      <a href="/admin/ui/new" aria-current="page">{{t "ui.dashboard"}}</a>
-      <a href="/admin/ui/old">{{t "ui.admin"}}</a>
-    </nav>
-    <button type="button" class="icon" data-theme-toggle title="{{t "ui.theme"}}" aria-label="{{t "ui.theme"}}">◐</button>
-    {{with .Staff}}
-    <form method="post" action="/admin/logout">
-      <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <button class="plain" title="{{.Username}}">{{t "nav.logout"}}</button>
-    </form>
-    {{end}}
-  </div>
-</header>
-
-<main class="dm">
+{{define "content"}}{{$d := .D}}
   <h1>{{t "dash.title"}}</h1>
   <p class="sub">{{$d.Period}} · {{$d.Updated}}</p>
 
-  <form class="filters" method="get" action="/admin/dashboard" data-autosubmit>
+  <form class="filters" method="get" action="/admin/dashboard" data-autosubmit data-keep-url>
     <label class="date"><span>{{t "dash.from"}}</span><input type="date" name="from" value="{{$d.From}}"></label>
     <label class="date"><span>{{t "dash.to"}}</span><input type="date" name="to" value="{{$d.To}}"></label>
     <div class="seg" role="group">
@@ -42,9 +11,7 @@
       <button name="status" value="left" {{if eq $d.Status "left"}}aria-pressed="true"{{end}}>{{t "dash.left"}}</button>
     </div>
     {{if ne $d.Status ""}}<input type="hidden" name="status" value="{{$d.Status}}" data-status-keep>{{end}}
-    {{with $d.Table.Opts}}{{if .Group}}<input type="hidden" name="group" value="{{.Group}}">{{end}}{{if .Q}}<input type="hidden" name="q" value="{{.Q}}">{{end}}
-    <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">{{end}}
-    {{range $d.Table.PerOpts}}{{if .Selected}}<input type="hidden" name="per" value="{{.Value}}">{{end}}{{end}}
+    {{range $k, $vs := $d.Keep}}{{range $vs}}<input type="hidden" name="{{$k}}" value="{{.}}" data-keep>{{end}}{{end}}
     <a class="btn" href="/admin/dashboard">{{t "dash.reset"}}</a>
   </form>
 
@@ -89,28 +56,20 @@
   <section class="card">
     <div class="c-head">
       <h2>{{t "dash.matrix"}}</h2>
-      <span class="legend">
-        <i class="b0"></i>{{t "dash.l_none"}} <i class="b1"></i>{{t "dash.l_lt2"}} <i class="b2"></i>2–4
-        <i class="b3"></i>4–6 <i class="b4"></i>6–8 <i class="b5"></i>8–10 <i class="b6"></i>10+
-      </span>
+      <div class="tools">
+        <span class="legend">
+          <i class="b0"></i>{{t "dash.l_none"}} <i class="b1"></i>{{t "dash.l_lt2"}} <i class="b2"></i>2–4
+          <i class="b3"></i>4–6 <i class="b4"></i>6–8 <i class="b5"></i>8–10 <i class="b6"></i>10+
+        </span>
+        <form id="m-form" method="get" action="/admin/dashboard"
+              hx-get="/admin/dashboard" hx-target="#matrix-block" hx-select="#matrix-block" hx-select-oob="#students-table"
+              hx-swap="outerHTML" hx-push-url="true" hx-indicator="#matrix-block" hx-trigger="submit, change">
+          {{template "per-select" (perSelect "mper" $d.Matrix.PerOpts)}}
+          <noscript><button class="btn">{{t "dash.show"}}</button></noscript>
+        </form>
+      </div>
     </div>
-    {{with $d.Matrix}}
-    {{if .Empty}}<p class="muted">{{t "dash.empty"}}</p>{{else}}
-    <div class="matrix-wrap">
-    <svg class="matrix" viewBox="0 0 {{printf "%.0f" .W}} {{printf "%.0f" .H}}" role="img" aria-label="{{t "dash.matrix"}}">
-      {{range .Heads}}
-      <text class="mh{{if .Weekend}} we{{end}}" x="{{printf "%.1f" .X}}" y="12" text-anchor="middle">{{.Num}}</text>
-      <text class="mh small{{if .Weekend}} we{{end}}" x="{{printf "%.1f" .X}}" y="25" text-anchor="middle">{{.Wd}}</text>
-      {{end}}
-      {{$cw := .CellW}}{{$ch := .CellH}}
-      {{range .Rows}}{{$y := .Y}}
-      <text class="mn" x="0" y="{{printf "%.1f" (addf $y 14)}}">{{.Name}}</text>
-      {{range .Cells}}<rect class="b{{.Bucket}}" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" $y}}" width="{{printf "%.1f" $cw}}" height="{{$ch}}" rx="3"><title>{{.Title}}</title></rect>{{end}}
-      {{end}}
-    </svg>
-    </div>
-    {{end}}
-    {{end}}
+    {{template "matrix-block" .}}
   </section>
 
   <section class="card" id="students-card">
@@ -118,20 +77,15 @@
       <h2>{{t "dash.students"}}</h2>
       {{with $d.Table}}
       <form class="tools" id="tbl-form" method="get" action="/admin/dashboard"
-            hx-get="/admin/dashboard" hx-target="#students-table" hx-select="#students-table" hx-swap="outerHTML"
-            hx-push-url="true" hx-indicator="#students-table"
+            hx-get="/admin/dashboard" hx-target="#students-table" hx-select="#students-table" hx-select-oob="#matrix-block"
+            hx-swap="outerHTML" hx-push-url="true" hx-indicator="#students-table"
             hx-trigger="submit, change, input changed delay:350ms from:#tbl-q, search from:#tbl-q">
-        <input type="hidden" name="from" value="{{$d.From}}">
-        <input type="hidden" name="to" value="{{$d.To}}">
-        {{if $d.Status}}<input type="hidden" name="status" value="{{$d.Status}}">{{end}}
         <select name="group" aria-label="{{t "c.group"}}">
           <option value="">{{t "dash.all_groups"}}</option>
           {{range .Groups}}<option {{if eq . $.D.Table.Opts.Group}}selected{{end}}>{{.}}</option>{{end}}
         </select>
         <input type="search" id="tbl-q" name="q" value="{{.Opts.Q}}" placeholder="{{t "dash.search"}}" aria-label="{{t "dash.search"}}" autocomplete="off">
-        <label class="per"><span>{{t "dash.per_page"}}</span>
-          <select name="per">{{range .PerOpts}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select>
-        </label>
+        {{template "per-select" (perSelect "per" .PerOpts)}}
         <noscript><button class="btn">{{t "dash.show"}}</button></noscript>
         <a class="btn" href="{{$d.CSV}}" data-csv>{{t "dash.export"}}</a>
       </form>
@@ -139,9 +93,33 @@
     </div>
     {{template "students-table" .}}
   </section>
-</main>
-</body>
-</html>
+{{end}}
+
+{{define "matrix-block"}}{{$d := .D}}{{with $d.Matrix}}
+<div id="matrix-block" hx-boost="true" hx-target="#matrix-block" hx-select="#matrix-block" hx-select-oob="#students-table"
+     hx-swap="outerHTML" hx-indicator="#matrix-block">
+  {{range $k, $vs := .Keep}}{{range $vs}}<input type="hidden" name="{{$k}}" value="{{.}}" form="m-form">{{end}}{{end}}
+  {{if .Empty}}<p class="muted">{{t "dash.empty"}}</p>{{else}}
+  <div class="matrix-wrap">
+  <svg class="matrix" viewBox="0 0 {{printf "%.0f" .W}} {{printf "%.0f" .H}}" role="img" aria-label="{{t "dash.matrix"}}">
+    {{range .Heads}}
+    <text class="mh{{if .Weekend}} we{{end}}" x="{{printf "%.1f" .X}}" y="12" text-anchor="middle">{{.Num}}</text>
+    <text class="mh small{{if .Weekend}} we{{end}}" x="{{printf "%.1f" .X}}" y="25" text-anchor="middle">{{.Wd}}</text>
+    {{end}}
+    {{$cw := .CellW}}{{$ch := .CellH}}
+    {{range .Rows}}{{$y := .Y}}
+    <text class="mn" x="0" y="{{printf "%.1f" (addf $y 14)}}">{{.Name}}</text>
+    {{range .Cells}}<rect class="b{{.Bucket}}" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" $y}}" width="{{printf "%.1f" $cw}}" height="{{$ch}}" rx="3"><title>{{.Title}}</title></rect>{{end}}
+    {{end}}
+  </svg>
+  </div>
+  {{template "pager" .Pager}}
+  {{end}}
+</div>
+{{end}}{{end}}
+
+{{/* htmx asks for one list; it gets both, so every link keeps the other's settings. */}}
+{{define "lists"}}{{template "matrix-block" .}}{{template "students-table" .}}{{end}}
 
 {{define "chart"}}
 <svg class="chart" viewBox="0 0 {{printf "%.0f" .W}} {{printf "%.0f" .H}}" role="img">
@@ -157,21 +135,23 @@
 {{end}}
 
 {{define "students-table"}}{{$d := .D}}{{with $d.Table}}
-<div id="students-table" hx-boost="true" hx-target="#students-table" hx-select="#students-table" hx-swap="outerHTML" hx-indicator="#students-table">
+<div id="students-table" hx-boost="true" hx-target="#students-table" hx-select="#students-table" hx-select-oob="#matrix-block"
+     hx-swap="outerHTML" hx-indicator="#students-table">
   <input type="hidden" name="sort" value="{{.SortField}}" form="tbl-form">
   <input type="hidden" name="dir" value="{{.DirField}}" form="tbl-form">
-  {{if eq .Total 0}}
+  {{range $k, $vs := .Keep}}{{range $vs}}<input type="hidden" name="{{$k}}" value="{{.}}" form="tbl-form">{{end}}{{end}}
+  {{if eq .Pager.Total 0}}
   <p class="muted">{{if $d.Empty}}{{t "dash.empty"}}{{else}}{{t "dash.no_match"}}{{end}}</p>
   {{else}}
   <div class="table-wrap">
-  <table class="students" id="students">
+  <table class="list" id="students">
     <thead><tr>
       {{range .Heads}}<th{{if .Num}} class="num"{{end}}{{if gt .Colspan 1}} colspan="{{.Colspan}}"{{end}}{{if .Sort}} aria-sort="{{.Sort}}"{{end}}><a href="{{.URL}}">{{.Label}}</a></th>{{end}}
     </tr></thead>
     <tbody>
     {{range .Rows}}
     <tr data-name="{{.Name}}">
-      <td><a class="name" href="/admin/students/{{.ID}}" hx-boost="false">{{.Name}}</a></td>
+      <td><a class="name" href="/admin/new/students/{{.ID}}" hx-boost="false">{{.Name}}</a></td>
       <td class="muted">{{.Group}}</td>
       <td>{{if .Active}}<span class="pill ok">● {{t "dash.st_active"}}</span>{{else}}<span class="pill gone">● {{t "dash.st_left"}}</span>{{end}}</td>
       <td class="num">{{.Hours}}</td>
@@ -187,16 +167,7 @@
     </tbody>
   </table>
   </div>
-  <div class="pager">
-    <span class="muted">{{t "dash.shown" .First .Last .Total}}</span>
-    {{if .Pages}}
-    <nav aria-label="{{t "dash.pages"}}">
-      {{if .Prev}}<a href="{{.Prev}}" aria-label="{{t "dash.prev"}}">‹</a>{{else}}<span class="off" aria-hidden="true">‹</span>{{end}}
-      {{range .Pages}}{{if .Gap}}<span class="gap">…</span>{{else if .Current}}<span class="cur" aria-current="page">{{.Num}}</span>{{else}}<a href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
-      {{if .Next}}<a href="{{.Next}}" aria-label="{{t "dash.next"}}">›</a>{{else}}<span class="off" aria-hidden="true">›</span>{{end}}
-    </nav>
-    {{end}}
-  </div>
+  {{template "pager" .Pager}}
   {{end}}
 </div>
 {{end}}{{end}}

@@ -459,6 +459,15 @@ type slip struct {
 
 // handleSlips shows printable personal links for students with an unused code.
 func (s *Server) handleSlips(w http.ResponseWriter, r *http.Request) {
+	slips, err := s.slips(r)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	s.render(w, r, http.StatusOK, "slips", slips)
+}
+
+func (s *Server) slips(r *http.Request) ([]slip, error) {
 	ctx := r.Context()
 	q := r.URL.Query()
 	where, args := "c.used_at IS NULL AND c.revoked_at IS NULL AND c.expires_at > ? AND s.archived = 0", []any{store.Ms(s.Now())}
@@ -473,8 +482,7 @@ func (s *Server) handleSlips(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT s.id, s.name, s.grp, c.code, c.expires_at FROM enroll_codes c
 		JOIN students s ON s.id = c.student_id WHERE `+where+` ORDER BY s.grp, s.name`, args...)
 	if err != nil {
-		s.serverError(w, err)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 	var slips []slip
@@ -483,17 +491,12 @@ func (s *Server) handleSlips(w http.ResponseWriter, r *http.Request) {
 		var code string
 		var exp int64
 		if err := rows.Scan(&sl.Student.ID, &sl.Student.Name, &sl.Student.Group, &code, &exp); err != nil {
-			s.serverError(w, err)
-			return
+			return nil, err
 		}
 		sl.Link, sl.Expires = core.StartLink(s.Cfg.BotUsername, code), store.FromMs(exp)
 		slips = append(slips, sl)
 	}
-	if err := rows.Err(); err != nil {
-		s.serverError(w, err)
-		return
-	}
-	s.render(w, r, http.StatusOK, "slips", slips)
+	return slips, rows.Err()
 }
 
 func pathID(r *http.Request) (int64, bool) {
@@ -559,7 +562,7 @@ func (s *Server) handleGenCode(w http.ResponseWriter, r *http.Request) {
 		back(w, r, "/admin/students", s.t("c.error", err.Error()), true)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/admin/students/slips?id=%d", id), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("%s?id=%d", slipsPath(r), id), http.StatusSeeOther)
 }
 
 // handleBulkCodes issues links for every active student (optionally in one
@@ -586,7 +589,7 @@ func (s *Server) handleBulkCodes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.Redirect(w, r, "/admin/students/slips?group="+url.QueryEscape(group), http.StatusSeeOther)
+	http.Redirect(w, r, slipsPath(r)+"?group="+url.QueryEscape(group), http.StatusSeeOther)
 }
 
 func (s *Server) handleUnlink(w http.ResponseWriter, r *http.Request) {
@@ -642,20 +645,32 @@ type dayTotal struct {
 }
 
 func (s *Server) handleStudent(w http.ResponseWriter, r *http.Request) {
+	d, err := s.studentPage(r)
+	switch {
+	case errors.Is(err, errNotFound):
+		http.NotFound(w, r)
+	case err != nil:
+		s.serverError(w, err)
+	default:
+		s.render(w, r, http.StatusOK, "student", d)
+	}
+}
+
+var errNotFound = errors.New("not found")
+
+// studentPage loads one student's page (old and new UI).
+func (s *Server) studentPage(r *http.Request) (*studentData, error) {
 	ctx := r.Context()
 	id, ok := pathID(r)
 	if !ok {
-		http.NotFound(w, r)
-		return
+		return nil, errNotFound
 	}
 	rows, err := s.studentRows(ctx, "s.id = ?", id)
 	if err != nil {
-		s.serverError(w, err)
-		return
+		return nil, err
 	}
 	if len(rows) == 0 {
-		http.NotFound(w, r)
-		return
+		return nil, errNotFound
 	}
 	p := s.parsePeriod(r, "month")
 	d := &studentData{Student: rows[0], Period: p, NowInput: s.Now(), LatencyMs: s.Cfg.AnomalyLatency.Milliseconds()}
@@ -663,8 +678,7 @@ func (s *Server) handleStudent(w http.ResponseWriter, r *http.Request) {
 	d.Next = periodQuery(url.Values{}, s.Calc.Shift(p, 1))
 	visits, err := hours.Load(ctx, s.DB, p.From, p.To, id)
 	if err != nil {
-		s.serverError(w, err)
-		return
+		return nil, err
 	}
 	sort.Slice(visits, func(i, j int) bool { return visits[i].Start.Before(visits[j].Start) })
 	d.Visits = visits
@@ -677,13 +691,12 @@ func (s *Server) handleStudent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if d.Corrections, err = hours.LoadCorrections(ctx, s.DB, id); err != nil {
-		s.serverError(w, err)
-		return
+		return nil, err
 	}
 	for _, h := range s.Hosts.All() {
 		d.Hosts = append(d.Hosts, h.Name)
 	}
-	s.render(w, r, http.StatusOK, "student", d)
+	return d, nil
 }
 
 func (s *Server) parseLocal(v string) (time.Time, error) {

@@ -57,11 +57,21 @@ type Config struct {
 	// Anomaly thresholds.
 	AnomalyLatency time.Duration // scan later than this after the token was issued
 	AnomalyMultiPC time.Duration // scans on two PCs within this window while the first is still live
-	AlertAfter     time.Duration // /healthz turns red after this long without heartbeats or bot polls
+	// New admin UI anomalies.
+	AnomalyLowActivityGap time.Duration // median gap between active pings at or above this: low activity
+	AnomalyLongVisit      time.Duration // visits longer than this
+	AnomalyLateFrom       Clock         // check-ins in [late_from, late_to) are late (may cross midnight)
+	AnomalyLateTo         Clock
+	AlertAfter            time.Duration // /healthz turns red after this long without heartbeats or bot polls
 }
 
 // Clock is a time of day.
 type Clock struct{ Hour, Minute int }
+
+// Offset returns the time from local midnight.
+func (c Clock) Offset() time.Duration {
+	return time.Duration(c.Hour)*time.Hour + time.Duration(c.Minute)*time.Minute
+}
 
 func (c Clock) String() string { return fmt.Sprintf("%02d:%02d", c.Hour, c.Minute) }
 
@@ -96,6 +106,10 @@ func Default() *Config {
 		StaffSessionMax:        12 * time.Hour,
 		AnomalyLatency:         45 * time.Second,
 		AnomalyMultiPC:         15 * time.Minute,
+		AnomalyLowActivityGap:  10 * time.Minute,
+		AnomalyLongVisit:       6 * time.Hour,
+		AnomalyLateFrom:        Clock{21, 0},
+		AnomalyLateTo:          Clock{5, 0},
 		AlertAfter:             15 * time.Minute,
 	}
 }
@@ -219,6 +233,14 @@ func (c *Config) set(k, v string) error {
 		dur(&c.AnomalyLatency)
 	case "anomaly_multi_pc":
 		dur(&c.AnomalyMultiPC)
+	case "anomaly_low_activity_gap":
+		dur(&c.AnomalyLowActivityGap)
+	case "anomaly_long_visit":
+		dur(&c.AnomalyLongVisit)
+	case "anomaly_late_from":
+		c.AnomalyLateFrom, err = parseClock(v)
+	case "anomaly_late_to":
+		c.AnomalyLateTo, err = parseClock(v)
 	case "alert_after":
 		dur(&c.AlertAfter)
 	default:

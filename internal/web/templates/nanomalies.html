@@ -1,0 +1,61 @@
+{{define "content"}}
+{{with .D}}
+<h1>{{t "anom.title"}}</h1>
+<form method="get" action="/admin/new/anomalies" class="filters" data-autosubmit>
+  <label class="date"><span>{{t "dash.from"}}</span><input type="date" name="from" value="{{.From}}"></label>
+  <label class="date"><span>{{t "dash.to"}}</span><input type="date" name="to" value="{{.To}}"></label>
+  <noscript><button class="btn">{{t "c.show"}}</button></noscript>
+</form>
+
+<section class="card">
+  <div class="c-head"><h2>{{t "nanom.low"}} <span class="count">{{len .Low}}</span></h2></div>
+  <p class="muted hint">{{t "nanom.low_hint" (dur .Gap)}}</p>
+  {{if .Low}}{{template "anom-visits" (anomList .Low "gap")}}{{end}}
+</section>
+
+<section class="card">
+  <div class="c-head"><h2>{{t "nanom.long"}} <span class="count">{{len .Long}}</span></h2></div>
+  <p class="muted hint">{{t "nanom.long_hint" (dur .LongVisit)}}</p>
+  {{if .Long}}{{template "anom-visits" (anomList .Long "")}}{{end}}
+</section>
+
+<section class="card">
+  <div class="c-head"><h2>{{t "nanom.late"}} <span class="count">{{len .Late}}</span></h2></div>
+  <p class="muted hint">{{t "nanom.late_hint" .LateFrom .LateTo}}</p>
+  {{if .Late}}{{template "anom-visits" (anomList .Late "")}}{{end}}
+</section>
+
+<section class="card">
+  <div class="c-head"><h2>{{t "nanom.multi"}} <span class="count">{{len .Multi}}</span></h2></div>
+  <p class="muted hint">{{t "nanom.multi_hint"}}</p>
+  {{if .Multi}}{{template "anom-visits" (anomList .Multi "flags")}}{{end}}
+</section>
+{{end}}
+{{end}}
+
+{{define "anom-visits"}}
+<div class="table-wrap">
+<table class="list">
+  <thead><tr>
+    <th><span class="th">{{t "nanom.scan"}}</span></th><th><span class="th">{{t "c.student"}}</span></th><th><span class="th">{{t "c.pc"}}</span></th>
+    <th><span class="th">{{t "c.start"}}</span></th><th><span class="th">{{t "c.end"}}</span></th><th class="num"><span class="th">{{t "c.duration"}}</span></th>
+    {{if eq .Extra "gap"}}<th class="num"><span class="th">{{t "nanom.gap"}}</span></th><th class="num"><span class="th">{{t "nanom.active"}}</span></th>{{end}}
+    {{if eq .Extra "flags"}}<th><span class="th">{{t "nanom.flags"}}</span></th>{{end}}
+  </tr></thead>
+  <tbody>
+  {{range .Visits}}
+  <tr>
+    <td>{{dt .Scan}}</td>
+    <td><a class="name" href="/admin/new/students/{{.Student.ID}}?period=month&amp;date={{date .Start}}">{{.Student.Name}}</a></td>
+    <td>{{.Host}}</td>
+    <td>{{clock .Start}}</td>
+    <td>{{if .Open}}<span class="pill ok">{{reason ""}}</span>{{else}}{{clock .End}}{{if ne (date .Start) (date .End)}} <small>({{date .End}})</small>{{end}}{{end}}</td>
+    <td class="num">{{dur .Duration}}</td>
+    {{if eq $.Extra "gap"}}<td class="num">{{dur .Gap}}</td><td class="num">{{.Active}}</td>{{end}}
+    {{if eq $.Extra "flags"}}<td>{{range .Flags}}<span class="pill warn">{{.}}</span> {{end}}</td>{{end}}
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

@@ -22,6 +22,8 @@ host_key_file = /etc/attendance/host_key
 timezone = Asia/Almaty
 lang = en
 school_name = Tomorrow School
+anomaly_long_visit = 5h
+anomaly_late_from = 22:30
 qr_rotate = 45s
 cleanup_at = 03:15
 hours_rounding = 5m
@@ -33,7 +35,9 @@ admin_from_lab_pcs = true
 	}
 	if c.BotUsername != "SchoolBot" || c.Lang != "en" || c.QRRotate != 45*time.Second ||
 		c.CleanupAt != (Clock{3, 15}) || c.HoursRounding != 5*time.Minute || len(c.AdminNetworks) != 2 ||
-		!c.AdminFromLabPCs || c.Timezone.String() != "Asia/Almaty" || c.SchoolName != "Tomorrow School" {
+		!c.AdminFromLabPCs || c.Timezone.String() != "Asia/Almaty" || c.SchoolName != "Tomorrow School" ||
+		c.AnomalyLongVisit != 5*time.Hour || c.AnomalyLateFrom != (Clock{22, 30}) || c.AnomalyLateTo != (Clock{5, 0}) ||
+		c.AnomalyLowActivityGap != 10*time.Minute || c.AnomalyLateFrom.Offset() != 22*time.Hour+30*time.Minute {
 		t.Errorf("%+v", c)
 	}
 }

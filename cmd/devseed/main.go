@@ -200,12 +200,21 @@ func run(cfgPath string, days, nStudents int, seed int64) error {
 		nVisits++
 		sid++
 		id := fmt.Sprintf("seed-%d", sid)
+		// A few visits are "distracted": input only every 10–20 minutes (the
+		// low-activity anomaly).
+		every := time.Duration(0)
+		if rng.Float64() < 0.05 {
+			every = time.Duration(10+rng.Intn(11)) * time.Minute
+		}
 		idle := func(t time.Time) sql.NullInt64 {
 			if kind >= powerCut && t.After(last) {
 				return sql.NullInt64{} // the agent cannot read the idle time
 			}
 			if t.After(last) {
 				return sql.NullInt64{Int64: t.Sub(last).Milliseconds(), Valid: true}
+			}
+			if every > 0 {
+				return sql.NullInt64{Int64: (t.Sub(start) % every).Milliseconds(), Valid: true}
 			}
 			return sql.NullInt64{Int64: int64(rng.Intn(40_000)), Valid: true}
 		}

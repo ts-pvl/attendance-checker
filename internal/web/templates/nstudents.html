@@ -1,0 +1,93 @@
+{{define "content"}}
+{{$admin := false}}{{with $.Staff}}{{$admin = .IsAdmin}}{{end}}
+{{with .D}}
+<div id="nstudents" hx-boost="true" hx-target="#nstudents" hx-select="#nstudents" hx-swap="outerHTML" hx-indicator="#nstudents">
+<h1>{{t "students.title"}}</h1>
+<p class="sub">{{t "students.summary" .Total .Linked .Pending .NotLinked}}</p>
+
+<form method="get" action="/admin/new/students" class="filters" data-autosubmit>
+  <select name="group" aria-label="{{t "c.group"}}">
+    <option value="">{{t "c.all_groups"}}</option>
+    {{range .Groups}}<option {{if eq . $.D.Group}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <label class="check"><input type="checkbox" name="archived" value="1" {{if .Archived}}checked{{end}}> {{t "students.show_archived"}}</label>
+  <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
+  {{template "per-select" (perSelect "per" .PerOpts)}}
+  <button class="btn">{{t "c.show"}}</button>
+  <a class="btn" href="/admin/new/students/slips?group={{.Group}}" hx-boost="false">{{t "students.slips"}}</a>
+</form>
+{{if $admin}}
+<form method="post" action="/admin/students/codes" class="filters" hx-boost="false">
+  <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+  <input type="hidden" name="group" value="{{.Group}}">
+  <input type="hidden" name="ui" value="new">
+  <button class="btn">{{if .Group}}{{t "students.gen_group" .Group}}{{else}}{{t "students.gen_all"}}{{end}}</button>
+</form>
+{{end}}
+
+<section class="card">
+{{if .Rows}}
+<div class="table-wrap">
+<table class="list">
+  <thead><tr>
+    {{range .Heads}}<th{{if .Sort}} aria-sort="{{.Sort}}"{{end}}><a href="{{.URL}}">{{.Label}}</a></th>{{end}}
+    {{if $admin}}<th><span class="th">{{t "c.actions"}}</span></th>{{end}}
+  </tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr>
+    <td><a class="name" href="/admin/new/students/{{.ID}}" hx-boost="false">{{.Name}}</a>{{if .Archived}} <span class="pill">{{t "students.archived"}}</span>{{end}}</td>
+    <td class="muted">{{.Group}}</td>
+    <td>
+      {{if .Linked}}<span class="pill ok">{{t "students.linked"}}</span> <small class="muted">{{.TGName}}{{if .TGUsername}} @{{.TGUsername}}{{end}}</small>
+      {{else if eq .CodeState "pending"}}<span class="pill warn">{{t "students.code_pending"}}</span> <small class="muted">{{t "students.expires" (date .CodeExpires)}}</small>
+      {{else if eq .CodeState "expired"}}<span class="pill err">{{t "students.code_expired"}}</span>
+      {{else}}<span class="pill">{{t "students.not_linked"}}</span>{{end}}
+    </td>
+    {{if $admin}}
+    <td class="actions">
+      {{if not .Archived}}{{if not .Linked}}
+      <form method="post" action="/admin/students/{{.ID}}/code" hx-boost="false">
+        <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="ui" value="new">
+        <button class="btn small">{{t "students.gen_code"}}</button>
+      </form>
+      {{end}}{{end}}
+    </td>
+    {{end}}
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{template "pager" .Pager}}
+{{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+</section>
+
+{{if $admin}}
+<div class="grid g-half">
+<section class="card">
+  <h2>{{t "students.import"}}</h2>
+  <p class="muted">{{t "students.import_hint"}}</p>
+  <form method="post" action="/admin/students/import" enctype="multipart/form-data" class="stack" hx-boost="false">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+    <input type="hidden" name="return" value="{{.Return}}">
+    <input type="file" name="file" accept=".csv,text/csv,text/plain" required>
+    <button class="btn primary">{{t "c.add"}}</button>
+  </form>
+</section>
+<section class="card">
+  <h2>{{t "students.add"}}</h2>
+  <form method="post" action="/admin/students/add" class="stack" hx-boost="false">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+    <input type="hidden" name="return" value="{{.Return}}">
+    <label>{{t "c.name"}} <input name="name" required></label>
+    <label>{{t "c.group"}} <input name="group" list="groups"></label>
+    <datalist id="groups">{{range .Groups}}<option value="{{.}}">{{end}}</datalist>
+    <button class="btn primary">{{t "c.add"}}</button>
+  </form>
+</section>
+</div>
+{{end}}
+</div>
+{{end}}
+{{end}}

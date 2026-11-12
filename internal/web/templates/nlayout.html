@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{brand}}</title>
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
+<script src="/static/theme.js"></script>
+<script src="/static/htmx.min.js" defer></script>
+<link rel="stylesheet" href="/static/dash.css">
+<script src="/static/dash.js" defer></script>
+{{if eq .Page "nslips"}}<script src="/static/qrcode.js" defer></script><script src="/static/qrsvg.js" defer></script>{{end}}
+<script src="/static/admin.js" defer></script>
+</head>
+<body class="dash">
+{{$p := .Page}}
+<header class="dh noprint">
+  <div class="dh-brand"><span class="dot" aria-hidden="true"></span>{{brand}}</div>
+  <nav class="tabs" aria-label="{{t "ui.sections"}}">
+    <a href="/admin/dashboard" {{if eq $p "dash"}}aria-current="page"{{end}}>{{t "ui.dashboard"}}</a>
+    <a href="/admin/new/students" {{if or (eq $p "nstudents") (eq $p "nstudent") (eq $p "nslips")}}aria-current="page"{{end}}>{{t "nav.students"}}</a>
+    <a href="/admin/new/anomalies" {{if eq $p "nanomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>
+    {{with .Staff}}{{if .IsAdmin}}<a href="/admin/new/journal" {{if eq $p "njournal"}}aria-current="page"{{end}}>{{t "nav.audit"}}</a>{{end}}{{end}}
+  </nav>
+  <div class="dh-right">
+    <a class="old-ui" href="/admin/ui/old">{{t "ui.old"}}</a>
+    <button type="button" class="icon" data-theme-toggle title="{{t "ui.theme"}}" aria-label="{{t "ui.theme"}}">◐</button>
+    {{with .Staff}}
+    <form method="post" action="/admin/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="plain" title="{{.Username}}">{{t "nav.logout"}}</button>
+    </form>
+    {{end}}
+  </div>
+</header>
+<main class="dm">
+{{if .Flash}}<p class="flash{{if .FlashErr}} err{{end}}" role="status">{{.Flash}}</p>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>
+
+{{/* "N–M of T" and page links; the links work without JavaScript. */}}
+{{define "pager"}}
+<div class="pager">
+  <span class="muted">{{if .Total}}{{t "dash.shown" .First .Last .Total}}{{end}}</span>
+  {{if .Links}}
+  <nav aria-label="{{t "dash.pages"}}">
+    {{if .Prev}}<a href="{{.Prev}}" aria-label="{{t "dash.prev"}}">‹</a>{{else}}<span class="off" aria-hidden="true">‹</span>{{end}}
+    {{range .Links}}{{if .Gap}}<span class="gap">…</span>{{else if .Current}}<span class="cur" aria-current="page">{{.Num}}</span>{{else}}<a href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+    {{if .Next}}<a href="{{.Next}}" aria-label="{{t "dash.next"}}">›</a>{{else}}<span class="off" aria-hidden="true">›</span>{{end}}
+  </nav>
+  {{end}}
+</div>
+{{end}}
+
+{{/* Page-size menu: .PerOpts with the parameter .Name. */}}
+{{define "per-select"}}
+<label class="per"><span>{{t "dash.per_page"}}</span>
+  <select name="{{.Name}}">{{range .Opts}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select>
+</label>
+{{end}}

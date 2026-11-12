@@ -1,0 +1,26 @@
+{{define "content"}}
+{{with .D}}
+<h1>{{t "audit.title"}}</h1>
+<form method="get" action="/admin/new/journal" class="filters" data-autosubmit>
+  {{template "per-select" (perSelect "per" .PerOpts)}}
+  <noscript><button class="btn">{{t "c.show"}}</button></noscript>
+</form>
+<section class="card">
+{{if .Rows}}
+<div class="table-wrap">
+<table class="list">
+  <thead><tr><th><span class="th">{{t "c.when"}}</span></th><th><span class="th">{{t "c.who"}}</span></th><th><span class="th">{{t "c.what"}}</span></th><th></th><th><span class="th">{{t "c.details"}}</span></th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr><td>{{dt .At}}</td><td>{{.Actor}}</td><td>{{.Action}}</td>
+    <td>{{if hasStudent .Target}}<a href="/admin/new/students/{{studentID .Target}}">{{.Target}}</a>{{else}}{{.Target}}{{end}}</td>
+    <td class="mono small wrap">{{.Details}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{template "pager" .Pager}}
+{{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+</section>
+{{end}}
+{{end}}

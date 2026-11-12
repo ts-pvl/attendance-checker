@@ -24,8 +24,32 @@
     if (csv) csv.href = '/admin/dashboard.csv' + window.location.search;
   });
 
-  // Changing a date reloads the dashboard.
+  // Filters apply as soon as a date, menu or checkbox changes. requestSubmit
+  // goes through htmx where the form is boosted.
   document.addEventListener('change', function (e) {
-    if (e.target.matches('form[data-autosubmit] input[type=date]') && e.target.value) e.target.form.submit();
+    var f = e.target.form;
+    if (!f || !f.hasAttribute('data-autosubmit')) return;
+    if (e.target.type === 'date' && !e.target.value) return;
+    if (e.target.matches('input[type=date], select, input[type=checkbox]')) {
+      if (f.requestSubmit) f.requestSubmit(); else f.submit();
+    }
   });
+
+  // The dashboard's date/status filter reloads the page: keep the list
+  // settings as they are now (htmx may have changed them since the page
+  // loaded), but start both lists on their first page.
+  var KEEP = ['group', 'q', 'sort', 'dir', 'per', 'mper'];
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f.querySelector('[data-keep]') && !f.hasAttribute('data-keep-url')) return;
+    f.querySelectorAll('[data-keep]').forEach(function (x) { x.remove(); });
+    var q = new URLSearchParams(window.location.search);
+    KEEP.forEach(function (k) {
+      q.getAll(k).forEach(function (v) {
+        var i = document.createElement('input');
+        i.type = 'hidden'; i.name = k; i.value = v; i.setAttribute('data-keep', '');
+        f.appendChild(i);
+      });
+    });
+  }, true);
 })();

@@ -134,7 +134,8 @@ type dashPage struct {
 	WeekdayChart    chart
 	Matrix          matrix
 	Table           tableView
-	CSV             string // export link: the table's filter and order, all rows
+	CSV             string     // export link: the table's filter and order, all rows
+	Keep            url.Values // list settings kept when the dates or status change (pages restart)
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -143,18 +144,21 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, err)
 		return
 	}
-	page := s.dashPage(d, q, parseTableOpts(r.URL.Query()))
-	// htmx asks for the table alone when sorting, filtering or paging; a
-	// history restore after a reload needs the whole page.
-	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "students-table" &&
-		r.Header.Get("HX-History-Restore-Request") != "true" {
-		s.renderBlock(w, r, http.StatusOK, "dash", "students-table", page)
-		return
+	rq := r.URL.Query()
+	page := s.dashPage(d, q, parseTableOpts(rq), parseMatrixOpts(rq))
+	// htmx asks for the table or the matrix alone when sorting, filtering or
+	// paging; a history restore after a reload needs the whole page.
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-History-Restore-Request") != "true" {
+		switch r.Header.Get("HX-Target") {
+		case "students-table", "matrix-block":
+			s.renderBlock(w, r, http.StatusOK, "dash", "lists", page)
+			return
+		}
 	}
 	s.render(w, r, http.StatusOK, "dash", page)
 }
 
-func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts) *dashPage {
+func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts, mo matrixOpts) *dashPage {
 	lang, loc := s.Cfg.Lang, s.Cfg.Timezone
 	num := func(x float64, dec int) string { return i18n.Num(lang, x, dec) }
 	clock := func(d time.Duration) string {
@@ -254,13 +258,15 @@ func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts) *dashPag
 	}
 	p.WeekdayChart = barChart(lang, 570, 270, wv, wl, nil, wt, false)
 
-	p.Matrix = s.buildMatrix(d)
+	// The table and the matrix page separately; each keeps the other's
+	// settings in its links and forms.
+	p.Matrix = s.buildMatrix(d, mo, t.query(q, t.Page))
 
 	maxH := 0.0 // the bars compare with the most hours of anyone shown, on any page
 	if n > 0 {
 		maxH = d.Students[0].Total.Hours()
 	}
-	p.Table = s.buildTable(d, q, t, func(st *dash.StudentStat) dashRow {
+	p.Table = s.buildTable(d, mo.query(q, mo.Page), t, func(st *dash.StudentStat) dashRow {
 		row := dashRow{
 			ID: st.ID, Name: st.Name, Group: st.Group, Active: st.Active,
 			HoursV: st.Total.Hours(), Hours: num(st.Total.Hours(), 1),
@@ -278,6 +284,7 @@ func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts) *dashPag
 		return row
 	})
 	p.CSV = "/admin/dashboard.csv?" + t.query(q, 1).Encode()
+	p.Keep = mo.query(t.query(url.Values{}, 1), 1)
 	return p
 }
 
@@ -436,6 +443,31 @@ type matrix struct {
 	Heads        []mhead
 	Rows         []mrow
 	Empty        bool
+	Pager        pager
+	PerOpts      []perOption
+	Keep         url.Values // the table's settings, kept by the matrix's own controls
+}
+
+const defaultMatrixPer = 10
+
+var matrixPerOptions = []int{10, 20, 30, 50} // plus "all"
+
+type matrixOpts struct{ Page, Per int }
+
+func parseMatrixOpts(q url.Values) matrixOpts {
+	return matrixOpts{Page: parsePage(q.Get("mpage")), Per: parsePer(q.Get("mper"), defaultMatrixPer)}
+}
+
+// query returns base plus the matrix settings that differ from the defaults.
+func (m matrixOpts) query(base url.Values, page int) url.Values {
+	q := cloneValues(base)
+	if m.Per != defaultMatrixPer {
+		q.Set("mper", perValue(m.Per))
+	}
+	if page > 1 {
+		q.Set("mpage", strconv.Itoa(page))
+	}
+	return q
 }
 
 type mhead struct {
@@ -459,18 +491,23 @@ type mcell struct {
 // buildMatrix lays the matrix out for a page about 1400 px wide, so it is
 // drawn at roughly its natural size: the columns share the width left after
 // the names, and the cell height stays fixed.
-func (s *Server) buildMatrix(d *dash.Dashboard) matrix {
+func (s *Server) buildMatrix(d *dash.Dashboard, mo matrixOpts, keep url.Values) matrix {
 	const width, nameW, gap, head, cellH = 1400.0, 230.0, 4.0, 34.0, 20.0
 	lang, loc := s.Cfg.Lang, s.Cfg.Timezone
 	n := max(len(d.Days), 1)
 	col := (width - nameW) / float64(n)
-	m := matrix{W: width, CellW: math.Max(col-gap, 2), CellH: cellH, Empty: len(d.Students) == 0}
-	m.H = head + float64(len(d.Students))*(cellH+gap)
+	m := matrix{W: width, CellW: math.Max(col-gap, 2), CellH: cellH, Empty: len(d.Students) == 0, Keep: keep,
+		PerOpts: perChoices(mo.Per, matrixPerOptions, s.t("dash.per_all"))}
+	// Rows in the dashboard's order (most hours first), one page at a time.
+	pg, lo, hi := paginate(len(d.Students), mo.Page, mo.Per, func(p int) string { return "/admin/dashboard?" + mo.query(keep, p).Encode() })
+	m.Pager = pg
+	page := d.Students[lo:hi]
+	m.H = head + float64(len(page))*(cellH+gap)
 	for i, dd := range d.Days {
 		m.Heads = append(m.Heads, mhead{X: nameW + float64(i)*col + m.CellW/2, Num: strconv.Itoa(dd.Date.Day()),
 			Wd: strings.ToLower(s.t(fmt.Sprintf("wd.%d", dd.Date.Weekday()))), Weekend: dd.Weekend})
 	}
-	for r, st := range d.Students {
+	for r, st := range page {
 		row := mrow{Y: head + float64(r)*(cellH+gap), Name: st.Name}
 		for i, dd := range d.Days {
 			row.Cells = append(row.Cells, mcell{X: nameW + float64(i)*col, Bucket: st.Cells[i],

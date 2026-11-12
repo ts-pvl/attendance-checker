@@ -81,7 +81,8 @@ func boolInt(b bool) int {
 }
 
 func parseTableOpts(q url.Values) tableOpts {
-	t := tableOpts{Group: q.Get("group"), Q: strings.TrimSpace(q.Get("q")), Sort: q.Get("sort"), Dir: q.Get("dir"), Page: 1, Per: defaultPerPage}
+	t := tableOpts{Group: q.Get("group"), Q: strings.TrimSpace(q.Get("q")), Sort: q.Get("sort"), Dir: q.Get("dir"),
+		Page: parsePage(q.Get("page")), Per: parsePer(q.Get("per"), defaultPerPage)}
 	if r := []rune(t.Q); len(r) > 100 {
 		t.Q = string(r[:100])
 	}
@@ -94,15 +95,6 @@ func parseTableOpts(q url.Values) tableOpts {
 		if key.desc {
 			t.Dir = "desc"
 		}
-	}
-	if p, err := strconv.Atoi(q.Get("page")); err == nil && p > 1 {
-		t.Page = p
-	}
-	// The menu offers perPageOptions and "all"; a URL may ask for any size.
-	if v := q.Get("per"); v == "all" {
-		t.Per = 0
-	} else if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 1000 {
-		t.Per = n
 	}
 	return t
 }
@@ -136,26 +128,28 @@ func (t tableOpts) rows(all []dash.StudentStat) []*dash.StudentStat {
 
 // query returns base plus the table settings that differ from the defaults.
 func (t tableOpts) query(base url.Values, page int) url.Values {
-	q := url.Values{}
-	for k, v := range base {
-		q[k] = v
+	q := cloneValues(base)
+	if t.Group != "" {
+		q.Set("group", t.Group)
 	}
-	set := func(k, v, def string) {
-		if v != def {
-			q.Set(k, v)
-		}
+	if t.Q != "" {
+		q.Set("q", t.Q)
 	}
-	set("group", t.Group, "")
-	set("q", t.Q, "")
 	q.Set("sort", t.Sort)
 	q.Set("dir", t.Dir)
-	if t.Per == 0 {
-		q.Set("per", "all")
-	} else if t.Per != defaultPerPage {
-		q.Set("per", strconv.Itoa(t.Per))
+	if t.Per != defaultPerPage {
+		q.Set("per", perValue(t.Per))
 	}
 	if page > 1 {
 		q.Set("page", strconv.Itoa(page))
+	}
+	return q
+}
+
+func cloneValues(v url.Values) url.Values {
+	q := url.Values{}
+	for k, x := range v {
+		q[k] = append([]string(nil), x...)
 	}
 	return q
 }
@@ -168,36 +162,20 @@ type tableHead struct {
 	Sort       string // "ascending", "descending" or ""
 }
 
-type pageLink struct {
-	Num     int
-	URL     string
-	Current bool
-	Gap     bool
-}
-
-type perOption struct {
-	Value, Label string
-	Selected     bool
-}
-
 type tableView struct {
 	Opts      tableOpts
 	Groups    []string
 	PerOpts   []perOption
 	Heads     []tableHead
 	Rows      []dashRow
-	Total     int
-	First     int // 1-based index of the first row shown
-	Last      int
-	Pages     []pageLink
-	Prev      string
-	Next      string
+	Pager     pager
 	SortField string // hidden inputs that keep the order when the controls change
 	DirField  string
+	Keep      url.Values // other settings of the page (the matrix) the controls must keep
 }
 
 func (s *Server) buildTable(d *dash.Dashboard, base url.Values, t tableOpts, row func(*dash.StudentStat) dashRow) tableView {
-	v := tableView{Opts: t}
+	v := tableView{Opts: t, Keep: base}
 	groups := map[string]bool{}
 	for _, st := range d.Students {
 		if st.Group != "" {
@@ -211,10 +189,7 @@ func (s *Server) buildTable(d *dash.Dashboard, base url.Values, t tableOpts, row
 		v.Groups = append(v.Groups, g)
 	}
 	slices.Sort(v.Groups)
-	for _, n := range perPageOptions {
-		v.PerOpts = append(v.PerOpts, perOption{strconv.Itoa(n), strconv.Itoa(n), t.Per == n})
-	}
-	v.PerOpts = append(v.PerOpts, perOption{"all", s.t("dash.per_all"), t.Per == 0})
+	v.PerOpts = perChoices(t.Per, perPageOptions, s.t("dash.per_all"))
 
 	for _, h := range []struct {
 		key, label string
@@ -239,39 +214,10 @@ func (s *Server) buildTable(d *dash.Dashboard, base url.Values, t tableOpts, row
 	}
 
 	rows := t.rows(d.Students)
-	v.Total = len(rows)
-	per := t.Per
-	if per == 0 {
-		per = max(v.Total, 1)
-	}
-	pages := max((v.Total+per-1)/per, 1)
-	page := min(t.Page, pages)
-	v.Opts.Page = page
-	lo, hi := (page-1)*per, min(page*per, v.Total)
+	pg, lo, hi := paginate(len(rows), t.Page, t.Per, func(p int) string { return "/admin/dashboard?" + t.query(base, p).Encode() })
+	v.Pager, v.Opts.Page = pg, pg.Page
 	for _, st := range rows[lo:hi] {
 		v.Rows = append(v.Rows, row(st))
-	}
-	if v.Total > 0 {
-		v.First, v.Last = lo+1, hi
-	}
-	link := func(p int) string { return "/admin/dashboard?" + t.query(base, p).Encode() }
-	if pages > 1 {
-		for p := 1; p <= pages; p++ {
-			// First, last and two either side of the current page; gaps between.
-			if p != 1 && p != pages && (p < page-2 || p > page+2) {
-				if n := len(v.Pages); n > 0 && !v.Pages[n-1].Gap {
-					v.Pages = append(v.Pages, pageLink{Gap: true})
-				}
-				continue
-			}
-			v.Pages = append(v.Pages, pageLink{Num: p, URL: link(p), Current: p == page})
-		}
-		if page > 1 {
-			v.Prev = link(page - 1)
-		}
-		if page < pages {
-			v.Next = link(page + 1)
-		}
 	}
 	v.SortField, v.DirField = t.Sort, t.Dir
 	return v

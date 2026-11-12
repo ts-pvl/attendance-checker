@@ -55,6 +55,12 @@ hours_daily_cap = 0
 # Anomaly list thresholds.
 anomaly_latency = 45s
 anomaly_multi_pc = 15m
+# New admin UI: low activity = median gap between active pings at least this;
+# long visits; check-ins between late_from and late_to (may cross midnight).
+anomaly_low_activity_gap = 10m
+anomaly_long_visit = 6h
+anomaly_late_from = 21:00
+anomaly_late_to = 05:00
 # /healthz (and the alert script) turn red after this long without heartbeats
 # (only if the last PC session timed out) or without contact with Telegram.
 alert_after = 15m
