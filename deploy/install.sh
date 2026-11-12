@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Install, start and set up the QR attendance system from the admin PC
-# (Ubuntu). One file: it downloads a release from GitHub, installs the server
-# on this PC (systemd, starts at boot) and then deploys the agent to the lab
-# PCs listed in the admin PC's existing Ansible inventory.
+# (Ubuntu). One file: it fetches a release with git, installs the server on
+# this PC (systemd, starts at boot) and then deploys the agent to the lab PCs
+# listed in an Ansible inventory.
 #
-#   ./install.sh                     first install, or upgrade to the latest release
-#   ./install.sh --limit TS-A01      try the agent on one PC first
-#   ./install.sh --help              all options
+#   git clone https://github.com/ts-pvl/attendance-checker.git
+#   cd attendance-checker
+#   ./deploy/install.sh                  first install, or upgrade to the latest release
+#   ./deploy/install.sh --limit PC-01    try the agent on one PC first
+#   ./deploy/install.sh --help           all options
+#
+# The release is the newest version tag (vYYYY.MM.DD) of the repository. The
+# code comes from a shallow git clone of that tag. The server binary is the
+# one published with the release, checked against its SHA256 sum, or it is
+# built from the cloned source with Go (--build, or when none is published).
 #
 # Run it as the admin user that normally runs Ansible (it uses that user's SSH
 # key for the lab PCs); it asks for the sudo password once. Running it again is
@@ -14,7 +21,7 @@
 # secrets stay in root-only files under /etc/attendance.
 set -euo pipefail
 
-REPO="ts-pvl/attendance-checker"
+DEFAULT_REPO_URL="https://github.com/ts-pvl/attendance-checker.git"
 PREFIX=/opt/attendance
 ETC=/etc/attendance
 SETTINGS="$ETC/install.env"
@@ -24,10 +31,14 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [options]
 
-  --version TAG      release to install (default: the latest release)
-  --inventory FILE   Ansible inventory of the lab PCs (the admin PC's hosts.yml)
+  --version TAG      release to install (default: the newest version tag)
+  --repo URL         git repository to install from (default: the origin of
+                     the clone this script is in, else the project's repository)
+  --build            build the server from the source with Go instead of
+                     downloading the published binary
+  --inventory FILE   Ansible inventory of the lab PCs
   --group NAME       inventory group of the lab PCs (default: students)
-  --limit PATTERN    deploy the agent only to these PCs, e.g. TS-A01 or 'TS-A*'
+  --limit PATTERN    deploy the agent only to these PCs, e.g. PC-01 or 'PC-0*'
   --server-only      install or upgrade the server, skip the lab PCs
   --pcs-only         deploy the agent to the lab PCs only
   --reconfigure      ask the setup questions again (bot, address, time zone, …)
@@ -36,9 +47,8 @@ Usage: install.sh [options]
                      (attendance-linux-<arch>, attendance-deploy.tar.gz, SHA256SUMS)
   -h, --help         this help
 
-Environment: GITHUB_TOKEN (read-only token for the private repository, used
-when the GitHub CLI is not logged in), ATTENDANCE_BOT_TOKEN, ANSIBLE_BIN
-(directory of another Ansible install; default /usr/bin, from apt).
+Environment: ATTENDANCE_BOT_TOKEN, ANSIBLE_BIN (directory of another Ansible
+install; default /usr/bin, from apt).
 EOF
 }
 
@@ -70,11 +80,13 @@ confirm() {  # confirm "question" → 0 for yes
 }
 
 # ── options ────────────────────────────────────────────────────────────────
-TAG="" INVENTORY="" GROUP="" LIMIT="" FROM_DIR=""
-DO_SERVER=1 DO_PCS=1 RECONFIGURE=0 YES=0
+TAG="" REPO_URL="" INVENTORY="" GROUP="" LIMIT="" FROM_DIR=""
+DO_SERVER=1 DO_PCS=1 RECONFIGURE=0 YES=0 BUILD=0
 while (($#)); do
   case "$1" in
     --version) TAG="${2:?}"; shift ;;
+    --repo) REPO_URL="${2:?}"; shift ;;
+    --build) BUILD=1 ;;
     --inventory) INVENTORY="${2:?}"; shift ;;
     --group) GROUP="${2:?}"; shift ;;
     --limit) LIMIT="${2:?}"; shift ;;
@@ -108,6 +120,7 @@ esac
 for c in curl tar sha256sum python3 ip systemctl sudo; do
   command -v "$c" >/dev/null || die "missing command: $c"
 done
+[[ -n "$FROM_DIR" ]] || command -v git >/dev/null || die "missing command: git (install it with: sudo apt install git)"
 [[ -d /run/systemd/system ]] || die "systemd is not running on this PC"
 
 WORK=$(mktemp -d)
@@ -126,7 +139,7 @@ SUDO_KEEPALIVE=$!
 ok "sudo"
 
 # Remembered answers from an earlier run (no secrets in this file).
-S_INVENTORY="" S_GROUP="" S_SERVER_IP="" S_PORT="" S_BOT_USERNAME="" S_TZ="" S_LANG="" S_ALERT_IDS="" S_TAG=""
+S_INVENTORY="" S_GROUP="" S_SERVER_IP="" S_PORT="" S_BOT_USERNAME="" S_TZ="" S_LANG="" S_ALERT_IDS="" S_TAG="" S_REPO_URL=""
 if sudo test -f "$SETTINGS"; then
   eval "$(sudo cat "$SETTINGS" | grep -E '^S_[A-Z_]+=' || true)"
   info "found an earlier install (${S_TAG:-unknown version})"
@@ -158,71 +171,107 @@ ok "$($ANSIBLE_PLAYBOOK --version | head -1)"
 # ── release ────────────────────────────────────────────────────────────────
 step "Getting the release"
 DL="$WORK/dl"
+SRC="$WORK/src"
 mkdir -p "$DL"
 BIN_ASSET="attendance-linux-$ARCH"
-NEEDED=("$BIN_ASSET" attendance-deploy.tar.gz SHA256SUMS)
+
+# check_sums FILE…: every file must be listed in SHA256SUMS and match it.
+check_sums() {
+  local f
+  ( cd "$DL"
+    for f in "$@"; do
+      grep -E "^[0-9a-f]{64}  $f\$" SHA256SUMS > "sum.$f" || die "$f is not listed in SHA256SUMS"
+      sha256sum -c --quiet "sum.$f" >/dev/null 2>&1 || die "checksum mismatch: $f is damaged"
+    done )
+}
+
+# release_url REPO_URL TAG FILE: where GitHub publishes a release file.
+# Prints nothing for a repository that is not on github.com.
+release_url() {
+  local path
+  case "$1" in
+    https://github.com/*) path="${1#https://github.com/}" ;;
+    git@github.com:*) path="${1#git@github.com:}" ;;
+    ssh://git@github.com/*) path="${1#ssh://git@github.com/}" ;;
+    *) return 0 ;;
+  esac
+  path="${path%/}"
+  printf 'https://github.com/%s/releases/download/%s/%s\n' "${path%.git}" "$2" "$3"
+}
+
+# Build the server from the cloned source. Go downloads the toolchain version
+# named in go.mod when the installed one is older.
+build_binary() {
+  command -v go >/dev/null || return 1
+  info "building the server from source with $(go version | cut -d' ' -f3)"
+  ( cd "$SRC" && GOTOOLCHAIN="${GOTOOLCHAIN:-auto}" CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" GOFLAGS=-buildvcs=false \
+      go build -trimpath -ldflags "-s -w -X main.version=${TAG#v}" -o "$DL/$BIN_ASSET" ./cmd/attendance ) 2>&1 | sed 's/^/    /'
+  [[ -x "$DL/$BIN_ASSET" ]]
+}
 
 if [[ -n "$FROM_DIR" ]]; then
-  for f in "${NEEDED[@]}"; do
+  for f in "$BIN_ASSET" attendance-deploy.tar.gz SHA256SUMS; do
     [[ -f "$FROM_DIR/$f" ]] || die "$FROM_DIR/$f not found"
     cp "$FROM_DIR/$f" "$DL/"
   done
+  check_sums "$BIN_ASSET" attendance-deploy.tar.gz
   TAG="${TAG:-local-$(date +%Y%m%d%H%M%S)}"
-  info "from $FROM_DIR"
-elif command -v gh >/dev/null && gh auth status -h github.com >/dev/null 2>&1 \
-     && gh repo view "$REPO" --json name >/dev/null 2>&1; then
-  info "using the GitHub CLI login"
-  [[ -n "$TAG" ]] || TAG=$(gh release view -R "$REPO" --json tagName -q .tagName < /dev/null) || die "no release found in $REPO"
-  args=()
-  for f in "${NEEDED[@]}"; do args+=(-p "$f"); done
-  # Piped and without stdin: on a terminal gh sends terminal queries whose
-  # answers would eat the user's typed input.
-  gh release download "$TAG" -R "$REPO" -D "$DL" "${args[@]}" < /dev/null 2>&1 | sed 's/^/    /' \
-    || die "download of $TAG failed"
+  ok "release $TAG from $FROM_DIR (checksums verified)"
 else
-  # Private repository: a token with read access to its contents is needed.
-  # It goes to curl in a 0600 file, never on the command line, and is not kept.
-  GH_TOKEN_VALUE="${GITHUB_TOKEN:-}"
-  if [[ -z "$GH_TOKEN_VALUE" ]]; then
-    info "$REPO is private. Paste a GitHub token with read access to it"
-    info "(github.com → Settings → Developer settings → Fine-grained tokens,"
-    info " repository: $REPO, permission: Contents read-only). It is not saved."
-    ask_secret GH_TOKEN_VALUE "GitHub token"
+  # Which repository: --repo, the clone this script is run from, the one
+  # used last time, or the project's own.
+  if [[ -z "$REPO_URL" ]]; then
+    here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    if git -C "$here" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      REPO_URL=$(git -C "$here" remote get-url origin 2>/dev/null || true)
+    fi
+    REPO_URL="${REPO_URL:-${S_REPO_URL:-$DEFAULT_REPO_URL}}"
   fi
-  [[ -n "$GH_TOKEN_VALUE" ]] || die "no GitHub token"
-  ( umask 077; printf 'header = "Authorization: Bearer %s"\nheader = "X-GitHub-Api-Version: 2022-11-28"\n' "$GH_TOKEN_VALUE" > "$WORK/gh.curl" )
-  unset GH_TOKEN_VALUE
-  api="https://api.github.com/repos/$REPO/releases/latest"
-  [[ -z "$TAG" ]] || api="https://api.github.com/repos/$REPO/releases/tags/$TAG"
-  code=$(curl -sS -K "$WORK/gh.curl" -H "Accept: application/vnd.github+json" -o "$WORK/release.json" -w '%{http_code}' "$api") || die "cannot reach GitHub"
-  case "$code" in
-    200) ;;
-    401) die "GitHub rejected the token" ;;
-    404) die "release not found, or the token cannot read $REPO" ;;
-    *) die "GitHub answered HTTP $code" ;;
-  esac
-  TAG=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK/release.json")
-  for f in "${NEEDED[@]}"; do
-    url=$(python3 -c '
-import json, sys
-for a in json.load(open(sys.argv[1]))["assets"]:
-    if a["name"] == sys.argv[2]:
-        print(a["url"])
-' "$WORK/release.json" "$f")
-    [[ -n "$url" ]] || die "release $TAG has no file $f"
-    # curl does not send the Authorization header on to the storage host it
-    # is redirected to.
-    curl -fsSL -K "$WORK/gh.curl" -H "Accept: application/octet-stream" -o "$DL/$f" "$url" || die "download of $f failed"
-  done
-  rm -f "$WORK/gh.curl"
-fi
+  [[ "$REPO_URL" != -* ]] || die "bad repository: $REPO_URL"
+  info "repository: $REPO_URL"
+  # Git may ask for a login (a private repository). Without a terminal it
+  # must fail instead of waiting forever.
+  [[ -t 0 ]] || export GIT_TERMINAL_PROMPT=0
 
-( cd "$DL"
-  for f in "$BIN_ASSET" attendance-deploy.tar.gz; do
-    grep -qE "^[0-9a-f]{64}  $f\$" SHA256SUMS || die "$f is not listed in SHA256SUMS"
-  done
-  grep -E "  ($BIN_ASSET|attendance-deploy\.tar\.gz)\$" SHA256SUMS | sha256sum -c --quiet - ) || die "checksum mismatch: the download is damaged"
-ok "release $TAG (checksums verified)"
+  if [[ -z "$TAG" ]]; then
+    tags=$(git ls-remote --tags --refs "$REPO_URL" 'v[0-9]*') \
+      || die "cannot read $REPO_URL (check the address and your access to it)"
+    TAG=$(printf '%s\n' "$tags" | sed -n 's|.*refs/tags/||p' | sort -V | tail -n 1)
+    [[ -n "$TAG" ]] || die "$REPO_URL has no version tags (vYYYY.MM.DD); name a tag or branch with --version"
+  fi
+  [[ "$TAG" =~ ^[A-Za-z0-9._-]+$ && "$TAG" != -* ]] || die "bad version: $TAG"
+  git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$TAG" "$REPO_URL" "$SRC" \
+    || die "git clone of $TAG from $REPO_URL failed"
+  [[ -f "$SRC/deploy/ansible/site.yml" && -f "$SRC/agent/idle_logout" && -f "$SRC/go.mod" ]] \
+    || die "$REPO_URL at $TAG is not the attendance system"
+  ok "source $TAG (commit $(git -C "$SRC" rev-parse --short HEAD))"
+
+  # The server binary: the one published with the release, else built here.
+  got=""
+  bin_url=$(release_url "$REPO_URL" "$TAG" "$BIN_ASSET")
+  if (( ! BUILD )) && [[ -n "$bin_url" ]]; then
+    if curl -fsSL --max-time 300 -o "$DL/$BIN_ASSET.part" "$bin_url" 2>/dev/null \
+       && curl -fsSL --max-time 60 -o "$DL/SHA256SUMS" "$(release_url "$REPO_URL" "$TAG" SHA256SUMS)" 2>/dev/null; then
+      mv "$DL/$BIN_ASSET.part" "$DL/$BIN_ASSET"
+      check_sums "$BIN_ASSET"
+      chmod 0755 "$DL/$BIN_ASSET"
+      got="downloaded, checksum verified"
+    else
+      info "no published binary for $TAG at ${bin_url%/*}"
+    fi
+  fi
+  if [[ -z "$got" ]]; then
+    build_binary || die "the server binary is not available.
+       It is downloaded from the release page, which works only when the
+       repository is public and the release has the file $BIN_ASSET.
+       Otherwise install Go and run again with --build:  sudo apt install golang-go"
+    got="built from source"
+  fi
+  ok "server binary $BIN_ASSET ($got)"
+  # The same files a release bundle holds, taken from the clone.
+  git -C "$SRC" archive --format=tar.gz -o "$DL/attendance-deploy.tar.gz" HEAD deploy agent docs ':(glob)README*.md' \
+    || die "cannot pack the release files"
+fi
 
 REL="$PREFIX/releases/$TAG"
 sudo rm -rf "$REL.new"
@@ -242,7 +291,7 @@ step "Lab PCs (Ansible inventory)"
 if [[ -z "$INVENTORY" || $RECONFIGURE -eq 1 ]]; then
   def="$INVENTORY"
   if [[ -z "$def" ]]; then
-    for c in "$HOME/ansible/hosts.yml" "$HOME/admin_ansible/hosts.yml" "$PWD/hosts.yml" "$PWD/admin_ansible/hosts.yml"; do
+    for c in "$HOME/ansible/hosts.yml" "$HOME/ansible/inventory.ini" "$PWD/hosts.yml" "$PWD/inventory.ini"; do
       [[ -f "$c" ]] && { def="$c"; break; }
     done
   fi
@@ -446,7 +495,7 @@ if (( DO_SERVER )); then
   sudo install -d -m 0750 -o root -g attendance "$ETC"
   {
     echo "# Written by install.sh: answers for the next run. No secrets."
-    for v in INVENTORY GROUP SERVER_IP PORT BOT_USERNAME TZ_NAME:TZ UI_LANG:LANG ALERT_IDS TAG; do
+    for v in INVENTORY GROUP SERVER_IP PORT BOT_USERNAME TZ_NAME:TZ UI_LANG:LANG ALERT_IDS TAG REPO_URL; do
       src="${v%%:*}" dst="${v#*:}"
       printf 'S_%s=%q\n' "$dst" "${!src}"
     done
@@ -463,10 +512,10 @@ if (( DO_PCS )); then
   mapfile -t TARGETS < <(env ${PC_ANSIBLE_CFG:+ANSIBLE_CONFIG="$PC_ANSIBLE_CFG"} "$ANSIBLE_BIN/ansible" -i "$INVENTORY" "$target" --list-hosts 2>/dev/null | sed -n 's/^ \{4,\}//p')
   (( ${#TARGETS[@]} > 0 )) || die "no lab PCs match '$target'"
   info "${#TARGETS[@]} PCs: ${TARGETS[*]:0:8}$( (( ${#TARGETS[@]} > 8 )) && echo " …")"
-  info "This replaces idle_logout on them (the old one is kept as idle_logout.orig),"
-  info "points the browsers' home page at $SERVER_URL/qr, and writes it all to"
-  info "the disk through overlayroot-chroot so it survives reboots. Students get the"
-  info "new agent at their next login."
+  info "This installs the agent as /usr/local/bin/idle_logout and points the"
+  info "browsers' home page at $SERVER_URL/qr. On PCs with overlayroot it is"
+  info "also written to the disk, so it survives reboots (a file it replaces"
+  info "there is kept as <name>.orig). Students get the agent at their next login."
   if (( YES )) || confirm "Deploy to these ${#TARGETS[@]} PCs now?"; then
     set +e
     env ${PC_ANSIBLE_CFG:+ANSIBLE_CONFIG="$PC_ANSIBLE_CFG"} ANSIBLE_FORCE_COLOR="${B:+1}" ANSIBLE_RETRY_FILES_ENABLED=0 \
@@ -497,7 +546,7 @@ cat <<EOF
     Telegram bot  @$BOT_USERNAME
     Lab PCs       $PC_STATUS
     Server        sudo systemctl status attendance   ·   journalctl -u attendance -f
-    Docs          $REL/docs/staff-runbook.ru.md
+    Docs          $REL/docs/  (staff-runbook: .md English, .ru.md русский, .kk.md қазақша)
 
     Next: Admin UI → Students → import the CSV, create links and print the
     slips, then have a student scan the QR code on a PC.

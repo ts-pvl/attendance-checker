@@ -22,6 +22,6 @@ jobs:
       - name: gosec (fail on high severity)
         run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -severity high ./...
       - name: shellcheck
-        run: shellcheck agent/idle_logout deploy/alert/attendance-alert
+        run: shellcheck agent/idle_logout deploy/alert/attendance-alert deploy/install.sh scripts/dev.sh
       - name: cross-compile for the Pi
         run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/attendance

@@ -1,5 +1,7 @@
 # How to check in
 
+**English** · [Русский](student-instructions.ru.md) · [Қазақша](student-instructions.kk.md)
+
 ## Once: link your Telegram
 
 1. Open the personal link you were given on your phone (or scan the QR on your slip).

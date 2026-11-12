@@ -1,5 +1,7 @@
 # Staff runbook
 
+**English** · [Русский](staff-runbook.ru.md) · [Қазақша](staff-runbook.kk.md)
+
 Admin UI: `http://<server>:8080/admin` (school LAN only, not from the lab PCs).
 
 There are two interfaces. The switch at the top right moves between them, and
@@ -84,12 +86,14 @@ Teachers can read everything except the audit log; admins can also change data.
 
 ## Updates
 
-On the admin PC, run the installer again. It downloads the latest release.
+On the server, in the folder where the system was downloaded, get the latest
+version and run the installer again. It remembers the earlier answers.
 
 ```bash
-./install.sh              # server and agent on the PCs (asks before the PCs)
-./install.sh --pcs-only   # only the lab PCs, e.g. after reinstalling one
-./install.sh --limit TS-A01   # try the agent on one PC first
+cd attendance-checker && git pull
+./deploy/install.sh                  # server and agent on the PCs (asks before the PCs)
+./deploy/install.sh --pcs-only       # only the lab PCs, e.g. after reinstalling one
+./deploy/install.sh --limit pc-01    # try the agent on one PC first
 ```
 
 PCs that were off are listed at the end with the command to retry them.
@@ -119,7 +123,7 @@ Restore: `sudo systemctl stop attendance`, copy a backup over
 
 ## Alerts
 
-If alert ids were given to `install.sh` (`--reconfigure` to change them), or
+If alert ids were given to the installer (`./deploy/install.sh --reconfigure` to change them), or
 `attendance_alert_chat_ids` is set in Ansible, staff get a Telegram message
 when the server is unreachable, when the bot cannot reach Telegram, or when
 the PCs stop reporting mid-session. The bot's `/id` command shows your Telegram id.

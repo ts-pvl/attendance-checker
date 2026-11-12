@@ -24,7 +24,8 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
 * `admin_ansible/` is a copy of the school's real Ansible inventory, for reference only. Never commit it.
 * The lab PCs boot with overlayroot. The agent role writes to the lower disk by remounting it; do not copy files through `overlayroot-chroot` (see `docs/decisions.md`).
-* User-facing docs come in English and Russian (`README.md` has both, `docs/*.md` and `docs/*.ru.md`). Update both together.
+* User-facing docs come in English, Russian and Kazakh: `README.md`, `README.ru.md`, `README.kk.md`, and the staff runbook and student instructions in `docs/` (`.md`/`.en.md`, `.ru.md`, `.kk.md`). Update all three together and keep them simple: the readers run a school, not a codebase. `docs/development.md` and `docs/decisions.md` are English only.
+* The repository is public. Keep school-specific details (real host names, addresses, ports, people) out of code, docs and commit messages.
 
 ## Files a human must read line by line after any change
 
@@ -38,4 +39,4 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 
 `make dev` runs everything locally in `.dev/` (it adapts to WSL and seeds invented data with `cmd/devseed`, which refuses any database outside `.dev/`).
 
-Releases: `make release`, then `gh release create vYYYY.MM.DD …` (`.1`, `.2` for a second one the same day). `deploy/install.sh` on the admin PC downloads the latest release.
+Releases: `make release`, then `gh release create vYYYY.MM.DD …` (`.1`, `.2` for a second one the same day). `deploy/install.sh` on the admin PC uses only `git` and `curl`: it clones the newest version tag and downloads that release's binary, or builds it with Go (`docs/development.md`).

@@ -22,8 +22,8 @@ all: pi pi32 amd64
 # Files for a GitHub release, as deploy/install.sh downloads them. The bundle
 # is the committed deploy/, agent/ and docs/ (git archive), so commit first.
 release: amd64 pi
-	git diff --quiet HEAD -- deploy agent docs README.md || { echo "commit deploy/ agent/ docs/ first" >&2; exit 1; }
-	git archive --format=tar.gz -o dist/attendance-deploy.tar.gz HEAD deploy agent docs README.md
+	git diff --quiet HEAD -- deploy agent docs 'README*.md' || { echo "commit deploy/ agent/ docs/ and the READMEs first" >&2; exit 1; }
+	git archive --format=tar.gz -o dist/attendance-deploy.tar.gz HEAD deploy agent docs ':(glob)README*.md'
 	cp deploy/install.sh dist/install.sh
 	cd dist && sha256sum attendance-linux-amd64 attendance-linux-arm64 attendance-deploy.tar.gz install.sh > SHA256SUMS
 
