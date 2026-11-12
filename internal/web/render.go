@@ -58,8 +58,9 @@ func (s *Server) funcs() template.FuncMap {
 			}
 			return i18n.T(lang, "c.ago", i18n.Duration(lang, d))
 		},
-		"ms":  func(ms int64) string { return fmt.Sprintf("%.0f s", float64(ms)/1000) },
-		"add": func(a, b int) int { return a + b },
+		"ms":   func(ms int64) string { return fmt.Sprintf("%.0f s", float64(ms)/1000) },
+		"add":  func(a, b int) int { return a + b },
+		"addf": func(a, b float64) float64 { return a + b },
 		// Audit targets look like "student:12".
 		"hasStudent": func(target string) bool { return strings.HasPrefix(target, "student:") },
 		"studentID":  func(target string) string { return strings.TrimPrefix(target, "student:") },
@@ -75,7 +76,7 @@ func (s *Server) parseTemplates() error {
 		}
 		s.pages[name] = t
 	}
-	for _, name := range []string{"qr", "qr_denied"} {
+	for _, name := range []string{"qr", "qr_denied", "dash"} {
 		t, err := template.New(name+".html").Funcs(s.funcs()).ParseFS(templateFS, "templates/"+name+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", name, err)

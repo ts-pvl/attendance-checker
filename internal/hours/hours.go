@@ -174,10 +174,7 @@ type Row struct {
 func (c Calc) Summarize(visits []Visit, from, to time.Time) map[int64]*Row {
 	rows := map[int64]*Row{}
 	byStudent := map[int64][]interval{}
-	for _, v := range Effective(visits, from, to) {
-		if c.Policy.MinVisit > 0 && v.Duration() < c.Policy.MinVisit {
-			continue
-		}
+	for _, v := range c.Counted(visits, from, to) {
 		r := rows[v.StudentID]
 		if r == nil {
 			r = &Row{StudentID: v.StudentID, Days: map[string]time.Duration{}}
@@ -217,6 +214,42 @@ func (c Calc) Summarize(visits []Visit, from, to time.Time) map[int64]*Row {
 		}
 	}
 	return rows
+}
+
+// Counted returns the visits that count towards totals in [from, to): the
+// effective ones, without those shorter than the minimum visit.
+func (c Calc) Counted(visits []Visit, from, to time.Time) []Visit {
+	var out []Visit
+	for _, v := range Effective(visits, from, to) {
+		if c.Policy.MinVisit > 0 && v.Duration() < c.Policy.MinVisit {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// Span is a stretch of time a student was present.
+type Span struct{ Start, End time.Time }
+
+// Spans returns, per student, the time present in [from, to): the counted
+// visits merged (overlaps once) and clipped to the range. Daily rounding and
+// the daily cap are not applied; they only exist for totals.
+func (c Calc) Spans(visits []Visit, from, to time.Time) map[int64][]Span {
+	byStudent := map[int64][]interval{}
+	for _, v := range c.Counted(visits, from, to) {
+		byStudent[v.StudentID] = append(byStudent[v.StudentID], interval{v.Start, v.End})
+	}
+	out := map[int64][]Span{}
+	for id, ivs := range byStudent {
+		for _, iv := range merge(ivs) {
+			s, e := maxTime(iv.s, from), minTime(iv.e, to)
+			if e.After(s) {
+				out[id] = append(out[id], Span{s, e})
+			}
+		}
+	}
+	return out
 }
 
 func (c Calc) applyDayPolicy(d, dayLen time.Duration) time.Duration {

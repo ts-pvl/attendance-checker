@@ -79,8 +79,11 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("POST /admin/login", s.adminNet(http.HandlerFunc(s.handleLogin)))
 	mux.Handle("POST /admin/logout", s.staff(s.handleLogout))
 	mux.Handle("GET /admin/{$}", s.staff(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin/today", http.StatusSeeOther)
+		http.Redirect(w, r, s.home(r), http.StatusSeeOther)
 	}))
+	mux.Handle("GET /admin/ui/{which}", s.staff(s.handleUISwitch))
+	mux.Handle("GET /admin/dashboard", s.staff(s.handleDashboard))
+	mux.Handle("GET /admin/dashboard.csv", s.staff(s.handleDashboardCSV))
 	mux.Handle("GET /admin/today", s.staff(s.handleToday))
 	mux.Handle("GET /admin/today/live", s.staff(s.handleTodayLive))
 	mux.Handle("GET /admin/hours", s.staff(s.handleHours))

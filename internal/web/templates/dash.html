@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.D.Brand}}</title>
+<script src="/static/theme.js"></script>
+<link rel="stylesheet" href="/static/dash.css">
+<script src="/static/dash.js" defer></script>
+</head>
+<body class="dash">
+{{$d := .D}}
+<header class="dh">
+  <div class="dh-brand"><span class="dot" aria-hidden="true"></span>{{$d.Brand}}</div>
+  <div class="dh-right">
+    <nav class="ui-switch" aria-label="{{t "ui.switch"}}">
+      <a href="/admin/ui/new" aria-current="page">{{t "ui.dashboard"}}</a>
+      <a href="/admin/ui/old">{{t "ui.admin"}}</a>
+    </nav>
+    <button type="button" class="icon" data-theme-toggle title="{{t "ui.theme"}}" aria-label="{{t "ui.theme"}}">◐</button>
+    {{with .Staff}}
+    <form method="post" action="/admin/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="plain" title="{{.Username}}">{{t "nav.logout"}}</button>
+    </form>
+    {{end}}
+  </div>
+</header>
+
+<main class="dm">
+  <h1>{{t "dash.title"}}</h1>
+  <p class="sub">{{$d.Period}} · {{$d.Updated}}</p>
+
+  <form class="filters" method="get" action="/admin/dashboard" data-autosubmit>
+    <label class="date"><span>{{t "dash.from"}}</span><input type="date" name="from" value="{{$d.From}}"></label>
+    <label class="date"><span>{{t "dash.to"}}</span><input type="date" name="to" value="{{$d.To}}"></label>
+    <div class="seg" role="group">
+      <button name="status" value="" {{if eq $d.Status ""}}aria-pressed="true"{{end}}>{{t "dash.all"}}</button>
+      <button name="status" value="active" {{if eq $d.Status "active"}}aria-pressed="true"{{end}}>{{t "dash.active"}}</button>
+      <button name="status" value="left" {{if eq $d.Status "left"}}aria-pressed="true"{{end}}>{{t "dash.left"}}</button>
+    </div>
+    {{if ne $d.Status ""}}<input type="hidden" name="status" value="{{$d.Status}}" data-status-keep>{{end}}
+    <a class="btn" href="/admin/dashboard">{{t "dash.reset"}}</a>
+  </form>
+
+  <section class="kpis">
+    {{range $d.KPIs}}
+    <div class="card kpi">
+      <div class="k-label">{{.Label}}</div>
+      <div class="k-value">{{.Value}}{{if .Unit}}<span class="k-unit">{{.Unit}}</span>{{end}}</div>
+      <div class="k-sub">{{.Sub}}</div>
+    </div>
+    {{end}}
+  </section>
+
+  {{if $d.Insights}}
+  <section class="insights">
+    {{range $d.Insights}}<div class="card insight">{{.}}</div>{{end}}
+  </section>
+  {{end}}
+
+  <section class="grid g-wide">
+    <div class="card">
+      <div class="c-head"><h2>{{t "dash.c_hours"}}</h2><span>{{t "dash.c_hours_note"}}</span></div>
+      {{template "chart" $d.HoursChart}}
+    </div>
+    <div class="card">
+      <div class="c-head"><h2>{{t "dash.c_students"}}</h2><span>{{t "dash.c_students_note"}}</span></div>
+      {{template "chart" $d.StudentsChart}}
+    </div>
+  </section>
+
+  <section class="grid g-half">
+    <div class="card">
+      <div class="c-head"><h2>{{t "dash.c_hourly"}}</h2><span>{{t "dash.c_hourly_note"}}</span></div>
+      {{template "chart" $d.HourlyChart}}
+    </div>
+    <div class="card">
+      <div class="c-head"><h2>{{t "dash.c_weekday"}}</h2><span>{{t "dash.c_weekday_note"}}</span></div>
+      {{template "chart" $d.WeekdayChart}}
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="c-head">
+      <h2>{{t "dash.matrix"}}</h2>
+      <span class="legend">
+        <i class="b0"></i>{{t "dash.l_none"}} <i class="b1"></i>{{t "dash.l_lt2"}} <i class="b2"></i>2–4
+        <i class="b3"></i>4–6 <i class="b4"></i>6–8 <i class="b5"></i>8–10 <i class="b6"></i>10+
+      </span>
+    </div>
+    {{with $d.Matrix}}
+    {{if .Empty}}<p class="muted">{{t "dash.empty"}}</p>{{else}}
+    <div class="matrix-wrap">
+    <svg class="matrix" viewBox="0 0 {{printf "%.0f" .W}} {{printf "%.0f" .H}}" role="img" aria-label="{{t "dash.matrix"}}">
+      {{range .Heads}}
+      <text class="mh{{if .Weekend}} we{{end}}" x="{{printf "%.1f" .X}}" y="12" text-anchor="middle">{{.Num}}</text>
+      <text class="mh small{{if .Weekend}} we{{end}}" x="{{printf "%.1f" .X}}" y="25" text-anchor="middle">{{.Wd}}</text>
+      {{end}}
+      {{$cw := .CellW}}{{$ch := .CellH}}
+      {{range .Rows}}{{$y := .Y}}
+      <text class="mn" x="0" y="{{printf "%.1f" (addf $y 14)}}">{{.Name}}</text>
+      {{range .Cells}}<rect class="b{{.Bucket}}" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" $y}}" width="{{printf "%.1f" $cw}}" height="{{$ch}}" rx="3"><title>{{.Title}}</title></rect>{{end}}
+      {{end}}
+    </svg>
+    </div>
+    {{end}}
+    {{end}}
+  </section>
+
+  <section class="card">
+    <div class="c-head">
+      <h2>{{t "dash.students"}}</h2>
+      <div class="tools">
+        <input type="search" placeholder="{{t "dash.search"}}" aria-label="{{t "dash.search"}}" data-table-search="students">
+        <a class="btn" href="/admin/dashboard.csv?{{$d.Query}}">{{t "dash.export"}}</a>
+      </div>
+    </div>
+    {{if $d.Empty}}<p class="muted">{{t "dash.empty"}}</p>{{else}}
+    <div class="table-wrap">
+    <table class="students" id="students">
+      <thead><tr>
+        <th><button data-sort="0" data-type="text">{{t "dash.col_student"}}</button></th>
+        <th><button data-sort="1" data-type="text">{{t "dash.col_status"}}</button></th>
+        <th class="num"><button data-sort="2" data-type="num" aria-sort="descending">{{t "dash.col_hours"}}</button></th>
+        <th></th>
+        <th class="num"><button data-sort="4" data-type="num">{{t "dash.col_days"}}</button></th>
+        <th class="num"><button data-sort="5" data-type="num">{{t "dash.col_att"}}</button></th>
+        <th class="num"><button data-sort="6" data-type="num">{{t "dash.col_per_day"}}</button></th>
+        <th class="num"><button data-sort="7" data-type="num">{{t "dash.col_sessions"}}</button></th>
+        <th class="num"><button data-sort="8" data-type="num">{{t "dash.col_arrival"}}</button></th>
+        <th class="num"><button data-sort="9" data-type="text">{{t "dash.col_last"}}</button></th>
+      </tr></thead>
+      <tbody>
+      {{range $d.Rows}}
+      <tr data-name="{{.Name}}">
+        <td data-v="{{.Name}}"><a href="/admin/students/{{.ID}}">{{.Name}}</a></td>
+        <td data-v="{{if .Active}}0{{else}}1{{end}}">{{if .Active}}<span class="pill ok">● {{t "dash.st_active"}}</span>{{else}}<span class="pill gone">● {{t "dash.st_left"}}</span>{{end}}</td>
+        <td class="num" data-v="{{.HoursV}}">{{.Hours}}</td>
+        <td class="barcell"><svg class="hbar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="6" rx="3"/><rect width="{{printf "%.1f" .BarW}}" height="6" rx="3"/></svg></td>
+        <td class="num" data-v="{{.Days}}">{{.Days}}</td>
+        <td class="num" data-v="{{.AttV}}">{{.Att}}</td>
+        <td class="num" data-v="{{.PerDayV}}">{{.PerDay}}</td>
+        <td class="num" data-v="{{.Sessions}}">{{.Sessions}}</td>
+        <td class="num" data-v="{{.ArrivalV}}">{{.Arrival}}</td>
+        <td class="num" data-v="{{.LastV}}">{{.Last}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    {{end}}
+  </section>
+</main>
+</body>
+</html>
+
+{{define "chart"}}
+<svg class="chart" viewBox="0 0 {{printf "%.0f" .W}} {{printf "%.0f" .H}}" role="img">
+  {{range .Ticks}}
+  <line class="grid-line" x1="{{printf "%.1f" $.X0}}" x2="{{printf "%.1f" $.X1}}" y1="{{printf "%.1f" .Y}}" y2="{{printf "%.1f" .Y}}"/>
+  <text class="axis" x="{{printf "%.1f" (addf $.X0 -6)}}" y="{{printf "%.1f" (addf .Y 3.5)}}" text-anchor="end">{{.Label}}</text>
+  {{end}}
+  {{range .Bars}}<rect class="bar{{if .Light}} light{{end}}" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" .Y}}" width="{{printf "%.1f" .W}}" height="{{printf "%.1f" .H}}" rx="2"><title>{{.Title}}</title></rect>{{end}}
+  {{if .Area}}<path class="area" d="{{.Area}}"/><path class="line" d="{{.Line}}"/>{{end}}
+  {{range .Dots}}<circle class="hit" cx="{{printf "%.1f" .X}}" cy="{{printf "%.1f" .Y}}" r="7"><title>{{.Title}}</title></circle>{{end}}
+  {{range .Labels}}<text class="axis" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" (addf $.Y1 16)}}" text-anchor="middle">{{.Text}}</text>{{end}}
+</svg>
+{{end}}

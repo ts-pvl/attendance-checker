@@ -22,6 +22,10 @@
     <a href="/admin/anomalies" {{if eq $.Page "anomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>
     {{if .IsAdmin}}<a href="/admin/audit" {{if eq $.Page "audit"}}aria-current="page"{{end}}>{{t "nav.audit"}}</a>{{end}}
   </nav>
+  <nav class="ui-switch" aria-label="{{t "ui.switch"}}">
+    <a href="/admin/ui/new">{{t "ui.dashboard"}}</a>
+    <a href="/admin/ui/old" aria-current="page">{{t "ui.admin"}}</a>
+  </nav>
   <form method="post" action="/admin/logout" class="who">
     <span>{{.Username}} · {{if .IsAdmin}}{{t "role.admin"}}{{else}}{{t "role.teacher"}}{{end}}</span>
     <input type="hidden" name="csrf" value="{{.CSRF}}">

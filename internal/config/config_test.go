@@ -21,6 +21,7 @@ bot_username = @SchoolBot
 host_key_file = /etc/attendance/host_key
 timezone = Asia/Almaty
 lang = en
+school_name = Tomorrow School
 qr_rotate = 45s
 cleanup_at = 03:15
 hours_rounding = 5m
@@ -32,7 +33,7 @@ admin_from_lab_pcs = true
 	}
 	if c.BotUsername != "SchoolBot" || c.Lang != "en" || c.QRRotate != 45*time.Second ||
 		c.CleanupAt != (Clock{3, 15}) || c.HoursRounding != 5*time.Minute || len(c.AdminNetworks) != 2 ||
-		!c.AdminFromLabPCs || c.Timezone.String() != "Asia/Almaty" {
+		!c.AdminFromLabPCs || c.Timezone.String() != "Asia/Almaty" || c.SchoolName != "Tomorrow School" {
 		t.Errorf("%+v", c)
 	}
 }

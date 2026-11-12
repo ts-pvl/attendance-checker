@@ -317,3 +317,38 @@ func TestInvariantsRandom(t *testing.T) {
 		}
 	}
 }
+
+// Spans is the time a student was present: the same visits Summarize counts
+// (not deleted, not shorter than MinVisit), merged and clipped to the range.
+func TestSpansMergedAndClipped(t *testing.T) {
+	A := func(s string) time.Time { return at(almaty, s) }
+	calc := Calc{Loc: almaty, Policy: Policy{MinVisit: mins(10)}}
+	from, to := A("2026-03-10 00:00"), A("2026-03-11 00:00")
+	deleted := v("p4", 1, A("2026-03-10 18:00"), A("2026-03-10 19:00"))
+	deleted.Deleted = true
+	got := calc.Spans([]Visit{
+		v("p1", 1, A("2026-03-10 10:00"), A("2026-03-10 12:00")),
+		v("p2", 1, A("2026-03-10 11:30"), A("2026-03-10 13:00")), // overlaps p1
+		v("p3", 1, A("2026-03-10 15:00"), A("2026-03-10 15:05")), // shorter than MinVisit
+		deleted,
+		v("p5", 2, A("2026-03-09 23:00"), A("2026-03-10 01:00")), // starts the day before
+	}, from, to)
+	want := map[int64][]Span{
+		1: {{A("2026-03-10 10:00"), A("2026-03-10 13:00")}},
+		2: {{A("2026-03-10 00:00"), A("2026-03-10 01:00")}},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("students: %v", got)
+	}
+	for id, w := range want {
+		g := got[id]
+		if len(g) != len(w) {
+			t.Fatalf("student %d: %v", id, g)
+		}
+		for i := range w {
+			if !g[i].Start.Equal(w[i].Start) || !g[i].End.Equal(w[i].End) {
+				t.Errorf("student %d span %d: %v-%v, want %v-%v", id, i, g[i].Start, g[i].End, w[i].Start, w[i].End)
+			}
+		}
+	}
+}

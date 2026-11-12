@@ -194,7 +194,8 @@ func TestQRPage(t *testing.T) {
 
 func TestAdminAccess(t *testing.T) {
 	ts := newTestServer(t)
-	pages := []string{"/admin/today", "/admin/hours", "/admin/hours.csv", "/admin/students", "/admin/students/slips", "/admin/anomalies", "/admin/audit"}
+	pages := []string{"/admin/today", "/admin/hours", "/admin/hours.csv", "/admin/students", "/admin/students/slips", "/admin/anomalies", "/admin/audit",
+		"/admin/dashboard", "/admin/dashboard.csv"}
 	for _, p := range pages {
 		if w := ts.do(req{method: "GET", path: p, ip: staffIP}); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/login" {
 			t.Errorf("%s without login: %d %s", p, w.Code, w.Header().Get("Location"))
@@ -363,5 +364,86 @@ func TestPagesRenderWithData(t *testing.T) {
 	w := ts.do(req{method: "GET", path: "/admin/hours.csv?period=day", ip: staffIP, cookie: admin})
 	if !strings.Contains(w.Body.String(), "Alice,A,day,2026-03-10,2026-03-10,60,1.00,1") {
 		t.Errorf("CSV:\n%s", w.Body)
+	}
+}
+
+func TestDashboard(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := context.Background()
+	core.AddStudent(ctx, ts.s.DB, ts.now, "Alice", "A", "test")
+	// 08:00-09:00 today (ts.now is 10:00).
+	core.AddCorrection(ctx, ts.s.DB, ts.now, core.CorrectionInput{Action: "add", StudentID: 1, Host: "PC-01",
+		Start: ts.now.Add(-2 * time.Hour), End: ts.now.Add(-time.Hour), Reason: "no phone", Actor: "boss"})
+	lang := ts.s.Cfg.Lang
+	for _, user := range []string{"boss", "teach"} {
+		c, _ := ts.login(user)
+		w := ts.do(req{method: "GET", path: "/admin/dashboard", ip: staffIP, cookie: c})
+		body := w.Body.String()
+		if w.Code != 200 || !strings.Contains(body, i18n.T(lang, "dash.title")) || !strings.Contains(body, ">Alice</a>") ||
+			!strings.Contains(body, i18n.T(lang, "dash.st_active")) {
+			t.Fatalf("dashboard as %s: %d\n%s", user, w.Code, body)
+		}
+	}
+	admin, _ := ts.login("boss")
+	// One student, 1 h on the only school day: 100 %, arrival 08:00, active.
+	w := ts.do(req{method: "GET", path: "/admin/dashboard.csv", ip: staffIP, cookie: admin})
+	if !strings.Contains(w.Body.String(), "\n1,Alice,A,active,1.00,1,100.0,1.00,1,08:00,2026-03-10,") {
+		t.Errorf("CSV:\n%s", w.Body)
+	}
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, "attendance-2026-02-11-2026-03-10.csv") {
+		t.Errorf("default period is the last 28 days: %s", cd)
+	}
+	w = ts.do(req{method: "GET", path: "/admin/dashboard?status=left", ip: staffIP, cookie: admin})
+	if strings.Contains(w.Body.String(), ">Alice</a>") || !strings.Contains(w.Body.String(), i18n.T(lang, "dash.empty")) {
+		t.Errorf("left filter still shows Alice")
+	}
+	// Bad, reversed and huge ranges are corrected rather than rejected.
+	for _, q := range []string{"from=junk&to=2026-13-40", "from=2026-03-10&to=2026-01-01", "from=2000-01-01&to=2026-03-10"} {
+		if w := ts.do(req{method: "GET", path: "/admin/dashboard?" + q, ip: staffIP, cookie: admin}); w.Code != 200 {
+			t.Errorf("%s: %d", q, w.Code)
+		}
+	}
+	w = ts.do(req{method: "GET", path: "/admin/dashboard.csv?from=2000-01-01&to=2026-03-10", ip: staffIP, cookie: admin})
+	if cd := w.Header().Get("Content-Disposition"); !strings.Contains(cd, "attendance-2025-03-10-2026-03-10.csv") {
+		t.Errorf("range is capped at 366 days: %s", cd)
+	}
+}
+
+func TestUISwitch(t *testing.T) {
+	ts := newTestServer(t)
+	admin, _ := ts.login("boss")
+	if w := ts.do(req{method: "GET", path: "/admin/today", ip: staffIP, cookie: admin}); !strings.Contains(w.Body.String(), `href="/admin/ui/new"`) {
+		t.Error("old UI has no switch to the dashboard")
+	}
+	if w := ts.do(req{method: "GET", path: "/admin/dashboard", ip: staffIP, cookie: admin}); !strings.Contains(w.Body.String(), `href="/admin/ui/old"`) {
+		t.Error("dashboard has no switch back")
+	}
+	w := ts.do(req{method: "GET", path: "/admin/ui/new", ip: staffIP, cookie: admin})
+	var ui *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == uiCookie {
+			ui = c
+		}
+	}
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/dashboard" || ui == nil || ui.Value != "new" || !ui.HttpOnly {
+		t.Fatalf("switch to new: %d %s %+v", w.Code, w.Header().Get("Location"), ui)
+	}
+	// The choice is remembered for /admin/ and the next login.
+	w = ts.do(req{method: "GET", path: "/admin/", ip: staffIP, cookie: admin, header: map[string]string{"Cookie": "att_ui=new"}})
+	if w.Header().Get("Location") != "/admin/dashboard" {
+		t.Errorf("/admin/ after choosing the dashboard: %s", w.Header().Get("Location"))
+	}
+	w = ts.do(req{method: "POST", path: "/admin/login", ip: staffIP, header: map[string]string{"Cookie": "att_ui=new"},
+		form: url.Values{"username": {"boss"}, "password": {"correct horse battery"}}})
+	if w.Header().Get("Location") != "/admin/dashboard" {
+		t.Errorf("login after choosing the dashboard: %s", w.Header().Get("Location"))
+	}
+	w = ts.do(req{method: "GET", path: "/admin/ui/old", ip: staffIP, cookie: admin})
+	if w.Header().Get("Location") != "/admin/today" || !strings.Contains(w.Header().Get("Set-Cookie"), "att_ui=old") {
+		t.Errorf("switch back: %s %s", w.Header().Get("Location"), w.Header().Get("Set-Cookie"))
+	}
+	// Without a choice the old UI stays the start page.
+	if w := ts.do(req{method: "GET", path: "/admin/", ip: staffIP, cookie: admin}); w.Header().Get("Location") != "/admin/today" {
+		t.Errorf("default start page: %s", w.Header().Get("Location"))
 	}
 }

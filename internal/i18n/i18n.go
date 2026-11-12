@@ -4,6 +4,8 @@ package i18n
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -42,6 +44,68 @@ func Duration(lang string, d time.Duration) string {
 		return T(lang, "dur.min", m)
 	}
 	return T(lang, "dur.hmin", m/60, m%60)
+}
+
+// Plural returns key+".one", ".few" or ".many" for n, formatted with n.
+// English uses one/many; Russian one (1, 21…), few (2–4, 22–24…), many.
+func Plural(lang, key string, n int) string {
+	form := "many"
+	if lang == "ru" {
+		switch m10, m100 := n%10, n%100; {
+		case m10 == 1 && m100 != 11:
+			form = "one"
+		case m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14):
+			form = "few"
+		}
+	} else if n == 1 {
+		form = "one"
+	}
+	return T(lang, key+"."+form, n)
+}
+
+// Num formats x with dec decimals: "1 811", "4,6" in Russian (non-breaking
+// space between thousands, decimal comma) and "1,811", "4.6" in English.
+func Num(lang string, x float64, dec int) string {
+	neg := x < 0
+	if neg {
+		x = -x
+	}
+	s := strconv.FormatFloat(x, 'f', dec, 64)
+	intPart, frac, _ := strings.Cut(s, ".")
+	sep, point := ",", "."
+	if lang == "ru" {
+		sep, point = "\u00a0", ","
+	}
+	var b strings.Builder
+	for i, r := range intPart {
+		if i > 0 && (len(intPart)-i)%3 == 0 {
+			b.WriteString(sep)
+		}
+		b.WriteRune(r)
+	}
+	out := b.String()
+	if frac != "" {
+		out += point + frac
+	}
+	if neg && strings.Trim(s, "0.") != "" {
+		out = "-" + out
+	}
+	return out
+}
+
+// Day formats t as "31 авг" / "Aug 31"; with year, "31 авг 2026" / "Aug 31, 2026".
+func Day(lang string, t time.Time, year bool) string {
+	mon := T(lang, fmt.Sprintf("mon.%d", int(t.Month())))
+	switch {
+	case lang == "ru" && year:
+		return fmt.Sprintf("%d %s %d", t.Day(), mon, t.Year())
+	case lang == "ru":
+		return fmt.Sprintf("%d %s", t.Day(), mon)
+	case year:
+		return fmt.Sprintf("%s %d, %d", mon, t.Day(), t.Year())
+	default:
+		return fmt.Sprintf("%s %d", mon, t.Day())
+	}
 }
 
 // Reason returns the label for a visit or session end reason.
@@ -162,6 +226,88 @@ var messages = map[string][2]string{
 	"c.error":       {"Error: %s", "Ошибка: %s"},
 
 	// Weekdays (time.Weekday order, Sunday first)
+	"mon.1":  {"Jan", "янв"},
+	"mon.2":  {"Feb", "фев"},
+	"mon.3":  {"Mar", "мар"},
+	"mon.4":  {"Apr", "апр"},
+	"mon.5":  {"May", "мая"},
+	"mon.6":  {"Jun", "июн"},
+	"mon.7":  {"Jul", "июл"},
+	"mon.8":  {"Aug", "авг"},
+	"mon.9":  {"Sep", "сен"},
+	"mon.10": {"Oct", "окт"},
+	"mon.11": {"Nov", "ноя"},
+	"mon.12": {"Dec", "дек"},
+
+	// UI switcher (both admin UIs) and the new analytics dashboard
+	"ui.dashboard": {"Dashboard", "Дашборд"},
+	"ui.admin":     {"Admin", "Админка"},
+	"ui.switch":    {"Interface", "Интерфейс"},
+	"ui.theme":     {"Switch light/dark theme", "Сменить светлую/тёмную тему"},
+
+	"dash.analytics":        {"Analytics", "Аналитика"},
+	"dash.title":            {"Student attendance", "Посещаемость студентов"},
+	"dash.updated":          {"updated %s", "обновлено %s"},
+	"dash.from":             {"from", "с"},
+	"dash.to":               {"to", "по"},
+	"dash.all":              {"All", "Все"},
+	"dash.active":           {"Active", "Активные"},
+	"dash.left":             {"Left", "Выбывшие"},
+	"dash.reset":            {"Reset", "Сбросить"},
+	"dash.k_students":       {"Students", "Студентов"},
+	"dash.k_students_sub":   {"active now: %d", "активны сейчас: %d"},
+	"dash.k_hours":          {"Hours in school", "Часов в школе"},
+	"dash.k_sessions":       {"Sessions", "Сессий"},
+	"dash.k_sessions_sub":   {"avg %s h per session", "ср. %s ч на сессию"},
+	"dash.k_per_day":        {"Hours per student per day", "Часов на студента в день"},
+	"dash.k_per_day_sub":    {"on days present", "в днях присутствия"},
+	"dash.k_att":            {"Average attendance", "Средняя посещаемость"},
+	"dash.k_att_sub":        {"days present out of school days", "дней присутствия из учебных"},
+	"dash.k_arrival":        {"Average arrival", "Средний приход"},
+	"dash.k_arrival_sub":    {"start of the first session of the day", "время первой сессии дня"},
+	"dash.h":                {"h", "ч"},
+	"dash.school_days.one":  {"%d school day", "%d учебный день"},
+	"dash.school_days.few":  {"%d school days", "%d учебных дня"},
+	"dash.school_days.many": {"%d school days", "%d учебных дней"},
+	"dash.n_students.one":   {"%d student", "%d студент"},
+	"dash.n_students.few":   {"%d students", "%d студента"},
+	"dash.n_students.many":  {"%d students", "%d студентов"},
+	"dash.i_retention":      {"Retention:", "Удержание:"},
+	"dash.i_retention_v":    {"%d of %d students (%d%%)", "%d из %d студентов (%d%%)"},
+	"dash.i_retention_t":    {"were in school in the last %d days of the period.", "были в школе за последние %d дня периода."},
+	"dash.i_top":            {"Most hours:", "Больше всех часов:"},
+	"dash.i_top_t":          {"— %s h in %d d.", "— %s ч за %d дн."},
+	"dash.i_peak":           {"Peak day —", "Пиковый день —"},
+	"dash.i_peak_t":         {": %s h, %s. Peak load —", ": %s ч, %s. Пик загрузки —"},
+	"dash.c_hours":          {"Hours in school by day", "Часы в школе по дням"},
+	"dash.c_hours_note":     {"total hours of all students · lighter: weekends", "сумма часов всех студентов · светлые — выходные"},
+	"dash.c_students":       {"Students per day", "Студентов в день"},
+	"dash.c_students_note":  {"unique visits", "уникальные посещения"},
+	"dash.c_hourly":         {"Load by hour of day", "Загрузка по часам суток"},
+	"dash.c_hourly_note":    {"avg students in school", "ср. число студентов в школе"},
+	"dash.c_weekday":        {"By day of week", "По дням недели"},
+	"dash.c_weekday_note":   {"avg hours per present student", "ср. часов на присутствующего студента"},
+	"dash.matrix":           {"Attendance matrix", "Матрица посещаемости"},
+	"dash.l_none":           {"none", "нет"},
+	"dash.l_lt2":            {"< 2 h", "< 2 ч"},
+	"dash.students":         {"Students", "Студенты"},
+	"dash.search":           {"Search by name", "Поиск по имени"},
+	"dash.export":           {"Export CSV", "Экспорт CSV"},
+	"dash.col_student":      {"Student", "Студент"},
+	"dash.col_status":       {"Status", "Статус"},
+	"dash.col_hours":        {"Hours", "Часы"},
+	"dash.col_days":         {"Days", "Дней"},
+	"dash.col_att":          {"Attendance", "Посещаемость"},
+	"dash.col_per_day":      {"H/day", "Ч/день"},
+	"dash.col_sessions":     {"Sessions", "Сессий"},
+	"dash.col_arrival":      {"Arrival", "Приход"},
+	"dash.col_last":         {"Last visit", "Последний визит"},
+	"dash.st_active":        {"Active", "Активен"},
+	"dash.st_left":          {"Left", "Выбыл"},
+	"dash.empty":            {"No attendance in this period.", "За этот период посещений нет."},
+	"dash.cell":             {"%s, %s: %s h", "%s, %s: %s ч"},
+	"dash.bar":              {"%s: %s", "%s: %s"},
+
 	"wd.0": {"Sun", "Вс"},
 	"wd.1": {"Mon", "Пн"},
 	"wd.2": {"Tue", "Вт"},

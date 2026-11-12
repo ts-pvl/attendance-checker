@@ -116,7 +116,7 @@ func (s *Server) loadSession(r *http.Request) (*staffCtx, error) {
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	if st, _ := s.loadSession(r); st != nil {
-		http.Redirect(w, r, "/admin/today", http.StatusSeeOther)
+		http.Redirect(w, r, s.home(r), http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, http.StatusOK, "login", nil)
@@ -163,7 +163,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil,
 		MaxAge: int(s.Cfg.StaffSessionMax.Seconds()),
 	})
-	http.Redirect(w, r, "/admin/today", http.StatusSeeOther)
+	http.Redirect(w, r, s.home(r), http.StatusSeeOther)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

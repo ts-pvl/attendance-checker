@@ -6,6 +6,8 @@ db = /var/lib/attendance/attendance.db
 timezone = Asia/Almaty
 # Language of the bot, the QR page and the admin UI: ru or en.
 lang = ru
+# Shown in the header of the analytics dashboard (optional).
+#school_name = Tomorrow School
 
 # The bot's @username (without @). It goes into every QR code and enrollment link.
 bot_username = MySchoolAttendanceBot

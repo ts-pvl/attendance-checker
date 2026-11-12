@@ -19,6 +19,8 @@ type Config struct {
 	DBPath   string
 	Timezone *time.Location
 	Lang     string // "ru" or "en"
+	// SchoolName is shown in the header of the analytics dashboard (optional).
+	SchoolName string
 
 	BotUsername  string // without '@'
 	BotTokenFile string // root-only file; empty disables the bot
@@ -156,6 +158,8 @@ func (c *Config) set(k, v string) error {
 		c.Timezone, err = time.LoadLocation(v)
 	case "lang":
 		c.Lang = v
+	case "school_name":
+		c.SchoolName = v
 	case "bot_username":
 		c.BotUsername = strings.TrimPrefix(v, "@")
 	case "bot_token_file":
