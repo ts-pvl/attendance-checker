@@ -20,6 +20,11 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * **Hours and token rules: tests first.** Expected values in tests are computed by hand from the scenario, never by calling the code under test. When changing a rule, break it on purpose and check that a test fails.
 * Every user-visible string lives in `internal/i18n` in both English and Russian.
 * Never log or paste the bot token, host key, token secret or real student data. Use a separate test bot and fake data.
+* **Strict CSP:** no inline `<script>`, `style=` or `<style>` in templates. Charts and bars are server-rendered SVG with attributes; behaviour goes in `internal/web/static/*.js`.
+* **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
+* `admin_ansible/` is a copy of the school's real Ansible inventory, for reference only. Never commit it.
+* The lab PCs boot with overlayroot. The agent role writes to the lower disk by remounting it; do not copy files through `overlayroot-chroot` (see `docs/decisions.md`).
+* User-facing docs come in English and Russian (`README.md` has both, `docs/*.md` and `docs/*.ru.md`). Update both together.
 
 ## Files a human must read line by line after any change
 
@@ -30,3 +35,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 ## Commands
 
 `make test`, `make race`, `make check` (vet, staticcheck, govulncheck, gosec, shellcheck), `make pi`.
+
+`make dev` runs everything locally in `.dev/` (it adapts to WSL and seeds invented data with `cmd/devseed`, which refuses any database outside `.dev/`).
+
+Releases: `make release`, then `gh release create vYYYY.MM.DD …` (`.1`, `.2` for a second one the same day). `deploy/install.sh` on the admin PC downloads the latest release.

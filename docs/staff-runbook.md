@@ -2,6 +2,16 @@
 
 Admin UI: `http://<server>:8080/admin` (school LAN only, not from the lab PCs).
 
+There are two interfaces. The switch at the top right moves between them, and
+the next login opens the one used last.
+
+* **Dashboard** (new): hours, students present, load by hour and weekday, the
+  attendance matrix and a table of all students for a chosen period (the
+  current week by default; the matrix has its own period, the current month by
+  default). Its tabs are Students, Anomalies and Journal (admins), with the same
+  actions as the old pages.
+* **Admin** (old): Today, Hours, Students, Anomalies and Audit log, as below.
+
 ## Morning check (30 seconds)
 
 Open **Today** and look at the four cards at the top:
@@ -48,6 +58,19 @@ visit: usually a swap without logging out, but worth a look.
 *Auto-closed* visits were still open at 04:00, so check their end time. *Failed
 scans* shows rejected attempts.
 
+The Anomalies tab of the new interface adds four lists for the chosen period
+(the current week by default):
+
+* *Low-activity sessions*: long gaps between moments of activity, again and
+  again (median gap of 10 minutes or more). Someone may have left the PC
+  logged in, or something may be keeping it awake.
+* *Long sessions*: visits longer than 6 hours.
+* *Late scans*: check-ins between 21:00 and 05:00.
+* *Sessions with 2–3 anomalies*: visits that are in two or three of these lists.
+
+The thresholds are settings in `attendance.conf` (`anomaly_low_activity_gap`,
+`anomaly_long_visit`, `anomaly_late_from`, `anomaly_late_to`).
+
 ## Staff accounts (on the server)
 
 ```bash
@@ -58,6 +81,18 @@ sudo -u attendance attendance user disable maria -config /etc/attendance/attenda
 ```
 
 Teachers can read everything except the audit log; admins can also change data.
+
+## Updates
+
+On the admin PC, run the installer again. It downloads the latest release.
+
+```bash
+./install.sh              # server and agent on the PCs (asks before the PCs)
+./install.sh --pcs-only   # only the lab PCs, e.g. after reinstalling one
+./install.sh --limit TS-A01   # try the agent on one PC first
+```
+
+PCs that were off are listed at the end with the command to retry them.
 
 ## Restart, logs, rollback
 
@@ -84,6 +119,7 @@ Restore: `sudo systemctl stop attendance`, copy a backup over
 
 ## Alerts
 
-If `attendance_alert_chat_ids` is set in Ansible, staff get a Telegram message
+If alert ids were given to `install.sh` (`--reconfigure` to change them), or
+`attendance_alert_chat_ids` is set in Ansible, staff get a Telegram message
 when the server is unreachable, when the bot cannot reach Telegram, or when
 the PCs stop reporting mid-session. The bot's `/id` command shows your Telegram id.

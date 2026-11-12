@@ -22,6 +22,10 @@ Nothing to do: when you log out, or the PC is idle for 30 minutes, your visit
 closes at your last activity and the bot sends you a message. To record the
 exact time you leave, send the bot `/checkout`.
 
+Only one student is checked in at a PC at a time. If someone else scans the
+code on the PC you are using, your visit ends and the bot tells you. Scan
+again if you are still there.
+
 `/status` shows your current visit and today's hours.
 
 ## What is recorded
