@@ -125,7 +125,7 @@ svg .mh.we { opacity: .55; }
 svg.matrix rect:hover { stroke: var(--text); stroke-width: 1; }
 
 /* students table */
-.tools { display: flex; gap: 8px; align-items: center; }
+.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0; }
 .tools input[type=search] {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text);
   font: inherit; font-size: 12px; padding: 5px 10px; width: 220px;
@@ -133,17 +133,36 @@ svg.matrix rect:hover { stroke: var(--text); stroke-width: 1; }
 .table-wrap { overflow-x: auto; }
 table.students { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.students th { text-align: left; font-weight: 500; border-bottom: 1px solid var(--line); padding: 0; }
-table.students th button {
-  background: none; border: 0; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer;
-  padding: 8px 10px; width: 100%; text-align: inherit;
+table.students th a {
+  display: block; color: var(--muted); font-size: 11px; text-decoration: none; padding: 8px 10px; white-space: nowrap;
 }
-table.students th button[aria-sort="descending"]::after { content: " ↓"; }
-table.students th button[aria-sort="ascending"]::after { content: " ↑"; }
+table.students th a:hover { color: var(--text); }
+table.students th[aria-sort] a { color: var(--text); }
+table.students th[aria-sort="descending"] a::after { content: " ↓"; }
+table.students th[aria-sort="ascending"] a::after { content: " ↑"; }
+.tools select {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text);
+  font: inherit; font-size: 12px; padding: 4px 6px;
+}
+.tools .per { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+#students-table.htmx-request { opacity: .55; transition: opacity .15s; }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 10px 2px; font-size: 12px; }
+.pager nav { display: flex; gap: 4px; align-items: center; }
+.pager nav a, .pager nav span {
+  min-width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; padding: 0 6px; color: var(--muted); text-decoration: none;
+}
+.pager nav a { border: 1px solid var(--line); }
+.pager nav a:hover { color: var(--text); background: var(--panel-2); }
+.pager nav .cur { background: var(--accent); color: #fff; font-weight: 600; }
+.pager nav .off { opacity: .35; }
+.pager nav .gap { min-width: 16px; }
 table.students th.num, table.students td.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.students td { padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.students tr:last-child td { border-bottom: 0; }
-table.students td a { color: var(--text); text-decoration: none; font-weight: 550; }
-table.students td a:hover { color: var(--accent); }
+table.students td a.name { color: var(--text); text-decoration: none; font-weight: 550; }
+table.students td a.name:hover { color: var(--accent); }
+table.students td.muted { color: var(--muted); }
 td.barcell { width: 22%; min-width: 90px; }
 svg.hbar { display: block; width: 100%; height: 6px; }
 svg.hbar rect { fill: var(--accent); }

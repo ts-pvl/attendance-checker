@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.D.Brand}}</title>
+<meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
 <script src="/static/theme.js"></script>
+<script src="/static/htmx.min.js" defer></script>
 <link rel="stylesheet" href="/static/dash.css">
 <script src="/static/dash.js" defer></script>
 </head>
@@ -40,6 +42,9 @@
       <button name="status" value="left" {{if eq $d.Status "left"}}aria-pressed="true"{{end}}>{{t "dash.left"}}</button>
     </div>
     {{if ne $d.Status ""}}<input type="hidden" name="status" value="{{$d.Status}}" data-status-keep>{{end}}
+    {{with $d.Table.Opts}}{{if .Group}}<input type="hidden" name="group" value="{{.Group}}">{{end}}{{if .Q}}<input type="hidden" name="q" value="{{.Q}}">{{end}}
+    <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">{{end}}
+    {{range $d.Table.PerOpts}}{{if .Selected}}<input type="hidden" name="per" value="{{.Value}}">{{end}}{{end}}
     <a class="btn" href="/admin/dashboard">{{t "dash.reset"}}</a>
   </form>
 
@@ -108,48 +113,31 @@
     {{end}}
   </section>
 
-  <section class="card">
+  <section class="card" id="students-card">
     <div class="c-head">
       <h2>{{t "dash.students"}}</h2>
-      <div class="tools">
-        <input type="search" placeholder="{{t "dash.search"}}" aria-label="{{t "dash.search"}}" data-table-search="students">
-        <a class="btn" href="/admin/dashboard.csv?{{$d.Query}}">{{t "dash.export"}}</a>
-      </div>
-    </div>
-    {{if $d.Empty}}<p class="muted">{{t "dash.empty"}}</p>{{else}}
-    <div class="table-wrap">
-    <table class="students" id="students">
-      <thead><tr>
-        <th><button data-sort="0" data-type="text">{{t "dash.col_student"}}</button></th>
-        <th><button data-sort="1" data-type="text">{{t "dash.col_status"}}</button></th>
-        <th class="num"><button data-sort="2" data-type="num" aria-sort="descending">{{t "dash.col_hours"}}</button></th>
-        <th></th>
-        <th class="num"><button data-sort="4" data-type="num">{{t "dash.col_days"}}</button></th>
-        <th class="num"><button data-sort="5" data-type="num">{{t "dash.col_att"}}</button></th>
-        <th class="num"><button data-sort="6" data-type="num">{{t "dash.col_per_day"}}</button></th>
-        <th class="num"><button data-sort="7" data-type="num">{{t "dash.col_sessions"}}</button></th>
-        <th class="num"><button data-sort="8" data-type="num">{{t "dash.col_arrival"}}</button></th>
-        <th class="num"><button data-sort="9" data-type="text">{{t "dash.col_last"}}</button></th>
-      </tr></thead>
-      <tbody>
-      {{range $d.Rows}}
-      <tr data-name="{{.Name}}">
-        <td data-v="{{.Name}}"><a href="/admin/students/{{.ID}}">{{.Name}}</a></td>
-        <td data-v="{{if .Active}}0{{else}}1{{end}}">{{if .Active}}<span class="pill ok">● {{t "dash.st_active"}}</span>{{else}}<span class="pill gone">● {{t "dash.st_left"}}</span>{{end}}</td>
-        <td class="num" data-v="{{.HoursV}}">{{.Hours}}</td>
-        <td class="barcell"><svg class="hbar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="6" rx="3"/><rect width="{{printf "%.1f" .BarW}}" height="6" rx="3"/></svg></td>
-        <td class="num" data-v="{{.Days}}">{{.Days}}</td>
-        <td class="num" data-v="{{.AttV}}">{{.Att}}</td>
-        <td class="num" data-v="{{.PerDayV}}">{{.PerDay}}</td>
-        <td class="num" data-v="{{.Sessions}}">{{.Sessions}}</td>
-        <td class="num" data-v="{{.ArrivalV}}">{{.Arrival}}</td>
-        <td class="num" data-v="{{.LastV}}">{{.Last}}</td>
-      </tr>
+      {{with $d.Table}}
+      <form class="tools" id="tbl-form" method="get" action="/admin/dashboard"
+            hx-get="/admin/dashboard" hx-target="#students-table" hx-select="#students-table" hx-swap="outerHTML"
+            hx-push-url="true" hx-indicator="#students-table"
+            hx-trigger="submit, change, input changed delay:350ms from:#tbl-q, search from:#tbl-q">
+        <input type="hidden" name="from" value="{{$d.From}}">
+        <input type="hidden" name="to" value="{{$d.To}}">
+        {{if $d.Status}}<input type="hidden" name="status" value="{{$d.Status}}">{{end}}
+        <select name="group" aria-label="{{t "c.group"}}">
+          <option value="">{{t "dash.all_groups"}}</option>
+          {{range .Groups}}<option {{if eq . $.D.Table.Opts.Group}}selected{{end}}>{{.}}</option>{{end}}
+        </select>
+        <input type="search" id="tbl-q" name="q" value="{{.Opts.Q}}" placeholder="{{t "dash.search"}}" aria-label="{{t "dash.search"}}" autocomplete="off">
+        <label class="per"><span>{{t "dash.per_page"}}</span>
+          <select name="per">{{range .PerOpts}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select>
+        </label>
+        <noscript><button class="btn">{{t "dash.show"}}</button></noscript>
+        <a class="btn" href="{{$d.CSV}}" data-csv>{{t "dash.export"}}</a>
+      </form>
       {{end}}
-      </tbody>
-    </table>
     </div>
-    {{end}}
+    {{template "students-table" .}}
   </section>
 </main>
 </body>
@@ -167,3 +155,48 @@
   {{range .Labels}}<text class="axis" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" (addf $.Y1 16)}}" text-anchor="middle">{{.Text}}</text>{{end}}
 </svg>
 {{end}}
+
+{{define "students-table"}}{{$d := .D}}{{with $d.Table}}
+<div id="students-table" hx-boost="true" hx-target="#students-table" hx-select="#students-table" hx-swap="outerHTML" hx-indicator="#students-table">
+  <input type="hidden" name="sort" value="{{.SortField}}" form="tbl-form">
+  <input type="hidden" name="dir" value="{{.DirField}}" form="tbl-form">
+  {{if eq .Total 0}}
+  <p class="muted">{{if $d.Empty}}{{t "dash.empty"}}{{else}}{{t "dash.no_match"}}{{end}}</p>
+  {{else}}
+  <div class="table-wrap">
+  <table class="students" id="students">
+    <thead><tr>
+      {{range .Heads}}<th{{if .Num}} class="num"{{end}}{{if gt .Colspan 1}} colspan="{{.Colspan}}"{{end}}{{if .Sort}} aria-sort="{{.Sort}}"{{end}}><a href="{{.URL}}">{{.Label}}</a></th>{{end}}
+    </tr></thead>
+    <tbody>
+    {{range .Rows}}
+    <tr data-name="{{.Name}}">
+      <td><a class="name" href="/admin/students/{{.ID}}" hx-boost="false">{{.Name}}</a></td>
+      <td class="muted">{{.Group}}</td>
+      <td>{{if .Active}}<span class="pill ok">● {{t "dash.st_active"}}</span>{{else}}<span class="pill gone">● {{t "dash.st_left"}}</span>{{end}}</td>
+      <td class="num">{{.Hours}}</td>
+      <td class="barcell"><svg class="hbar" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="6" rx="3"/><rect width="{{printf "%.1f" .BarW}}" height="6" rx="3"/></svg></td>
+      <td class="num">{{.Days}}</td>
+      <td class="num">{{.Att}}</td>
+      <td class="num">{{.PerDay}}</td>
+      <td class="num">{{.Sessions}}</td>
+      <td class="num">{{.Arrival}}</td>
+      <td class="num">{{.Last}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  <div class="pager">
+    <span class="muted">{{t "dash.shown" .First .Last .Total}}</span>
+    {{if .Pages}}
+    <nav aria-label="{{t "dash.pages"}}">
+      {{if .Prev}}<a href="{{.Prev}}" aria-label="{{t "dash.prev"}}">‹</a>{{else}}<span class="off" aria-hidden="true">‹</span>{{end}}
+      {{range .Pages}}{{if .Gap}}<span class="gap">…</span>{{else if .Current}}<span class="cur" aria-current="page">{{.Num}}</span>{{else}}<a href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+      {{if .Next}}<a href="{{.Next}}" aria-label="{{t "dash.next"}}">›</a>{{else}}<span class="off" aria-hidden="true">›</span>{{end}}
+    </nav>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}{{end}}

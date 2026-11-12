@@ -133,8 +133,8 @@ type dashPage struct {
 	HourlyChart     chart
 	WeekdayChart    chart
 	Matrix          matrix
-	Rows            []dashRow
-	Query           string
+	Table           tableView
+	CSV             string // export link: the table's filter and order, all rows
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
@@ -143,10 +143,18 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "dash", s.dashPage(d, q))
+	page := s.dashPage(d, q, parseTableOpts(r.URL.Query()))
+	// htmx asks for the table alone when sorting, filtering or paging; a
+	// history restore after a reload needs the whole page.
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "students-table" &&
+		r.Header.Get("HX-History-Restore-Request") != "true" {
+		s.renderBlock(w, r, http.StatusOK, "dash", "students-table", page)
+		return
+	}
+	s.render(w, r, http.StatusOK, "dash", page)
 }
 
-func (s *Server) dashPage(d *dash.Dashboard, q url.Values) *dashPage {
+func (s *Server) dashPage(d *dash.Dashboard, q url.Values, t tableOpts) *dashPage {
 	lang, loc := s.Cfg.Lang, s.Cfg.Timezone
 	num := func(x float64, dec int) string { return i18n.Num(lang, x, dec) }
 	clock := func(d time.Duration) string {
@@ -164,7 +172,6 @@ func (s *Server) dashPage(d *dash.Dashboard, q url.Values) *dashPage {
 		Period:  day(d.From, true) + " — " + day(lastDay, true),
 		Updated: s.t("dash.updated", day(s.Now(), true)+", "+s.Now().In(loc).Format("15:04")),
 		Empty:   len(d.Students) == 0,
-		Query:   q.Encode(),
 	}
 	if s.Cfg.SchoolName != "" {
 		p.Brand = s.Cfg.SchoolName + " - " + p.Brand
@@ -249,11 +256,11 @@ func (s *Server) dashPage(d *dash.Dashboard, q url.Values) *dashPage {
 
 	p.Matrix = s.buildMatrix(d)
 
-	maxH := 0.0
+	maxH := 0.0 // the bars compare with the most hours of anyone shown, on any page
 	if n > 0 {
 		maxH = d.Students[0].Total.Hours()
 	}
-	for _, st := range d.Students {
+	p.Table = s.buildTable(d, q, t, func(st *dash.StudentStat) dashRow {
 		row := dashRow{
 			ID: st.ID, Name: st.Name, Group: st.Group, Active: st.Active,
 			HoursV: st.Total.Hours(), Hours: num(st.Total.Hours(), 1),
@@ -268,8 +275,9 @@ func (s *Server) dashPage(d *dash.Dashboard, q url.Values) *dashPage {
 		if st.HasArrival {
 			row.ArrivalV, row.Arrival = int(st.AvgArrival/time.Minute), clock(st.AvgArrival)
 		}
-		p.Rows = append(p.Rows, row)
-	}
+		return row
+	})
+	p.CSV = "/admin/dashboard.csv?" + t.query(q, 1).Encode()
 	return p
 }
 
@@ -483,6 +491,7 @@ func (s *Server) handleDashboardCSV(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, err)
 		return
 	}
+	students := parseTableOpts(r.URL.Query()).rows(d.Students) // the table's filter and order, every page
 	var buf bytes.Buffer
 	buf.WriteString("\xef\xbb\xbf") // BOM so Excel opens UTF-8 (Cyrillic names) correctly
 	cw := csv.NewWriter(&buf)
@@ -492,7 +501,7 @@ func (s *Server) handleDashboardCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	cw.Write(header)
 	f2 := func(x float64) string { return strconv.FormatFloat(x, 'f', 2, 64) }
-	for _, st := range d.Students {
+	for _, st := range students {
 		status := "left"
 		if st.Active {
 			status = "active"

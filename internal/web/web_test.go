@@ -447,3 +447,112 @@ func TestUISwitch(t *testing.T) {
 		t.Errorf("default start page: %s", w.Header().Get("Location"))
 	}
 }
+
+// The students table of the dashboard is sorted, filtered and paged on the
+// server; every state is a plain URL.
+func TestDashboardTable(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := context.Background()
+	lang := ts.s.Cfg.Lang
+	// Hours yesterday, 08:00 + h. Expected orders below are written by hand.
+	for i, st := range []struct {
+		name, group string
+		h           int
+	}{
+		{"Борисов Антон", "A", 5}, {"Алиев Бек", "B", 3}, {"Валиева Гуля", "A", 1}, {"Ершов Дан", "B", 4}, {"Гаврилов Ерлан", "A", 2},
+	} {
+		core.AddStudent(ctx, ts.s.DB, ts.now, st.name, st.group, "test")
+		start := ts.now.AddDate(0, 0, -1).Add(-2 * time.Hour)
+		core.AddCorrection(ctx, ts.s.DB, ts.now, core.CorrectionInput{Action: "add", StudentID: int64(i + 1), Host: "PC-01",
+			Start: start, End: start.Add(time.Duration(st.h) * time.Hour), Reason: "test", Actor: "boss"})
+	}
+	admin, _ := ts.login("boss")
+	rowRE := regexp.MustCompile(`<tr data-name="([^"]+)"`)
+	get := func(q string, hdr map[string]string) string {
+		t.Helper()
+		w := ts.do(req{method: "GET", path: "/admin/dashboard?" + q, ip: staffIP, cookie: admin, header: hdr})
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", q, w.Code)
+		}
+		return w.Body.String()
+	}
+	rows := func(q string) string {
+		var names []string
+		for _, m := range rowRE.FindAllStringSubmatch(get(q, nil), -1) {
+			names = append(names, strings.Fields(m[1])[0])
+		}
+		return strings.Join(names, ",")
+	}
+	cases := []struct{ q, want string }{
+		{"", "Борисов,Ершов,Алиев,Гаврилов,Валиева"},                        // hours, most first
+		{"per=2", "Борисов,Ершов"},                                          // first page
+		{"per=2&page=2", "Алиев,Гаврилов"},                                  // second page
+		{"per=2&page=99", "Валиева"},                                        // past the end: last page
+		{"per=2&page=-3", "Борисов,Ершов"},                                  // nonsense: first page
+		{"per=abc", "Борисов,Ершов,Алиев,Гаврилов,Валиева"},                 // nonsense: 30
+		{"per=all", "Борисов,Ершов,Алиев,Гаврилов,Валиева"},                 // everything
+		{"sort=name", "Алиев,Борисов,Валиева,Гаврилов,Ершов"},               // text: A→Z first
+		{"sort=name&dir=desc", "Ершов,Гаврилов,Валиева,Борисов,Алиев"},      //
+		{"sort=hours&dir=asc", "Валиева,Гаврилов,Алиев,Ершов,Борисов"},      //
+		{"sort=group&dir=asc", "Борисов,Гаврилов,Валиева,Ершов,Алиев"},      // A then B, hours within
+		{"sort=bogus&dir=sideways", "Борисов,Ершов,Алиев,Гаврилов,Валиева"}, // defaults
+		{"group=A", "Борисов,Гаврилов,Валиева"},                             //
+		{"group=B&sort=hours&dir=asc", "Алиев,Ершов"},                       //
+		{"group=Z", ""},     //
+		{"q=ВА", "Валиева"}, // case-insensitive name search
+		{"q=Ёрш", "Ершов"},  // ё matches е
+		{"q=ов&group=A&sort=name&per=1&page=2", "Гаврилов"}, // Борисов, Гаврилов match in A
+	}
+	for _, c := range cases {
+		if got := rows(c.q); got != c.want {
+			t.Errorf("%q: %s, want %s", c.q, got, c.want)
+		}
+	}
+	body := get("per=2&page=2", nil)
+	if !strings.Contains(body, i18n.T(lang, "dash.shown", 3, 4, 5)) {
+		t.Error("no '3–4 of 5' on page 2")
+	}
+	// Every column header is a sort link that keeps the other settings.
+	for _, key := range []string{"name", "group", "status", "hours", "days", "att", "perday", "sessions", "arrival", "last"} {
+		if !strings.Contains(body, "sort="+key) {
+			t.Errorf("no sort link for %s", key)
+		}
+	}
+	if !strings.Contains(body, "per=2") || !strings.Contains(body, "page=3") {
+		t.Error("pager links lose the page size or miss the next page")
+	}
+	// An htmx request for the table gets only the table.
+	frag := get("per=2&page=2", map[string]string{"HX-Request": "true", "HX-Target": "students-table"})
+	if strings.Contains(frag, "<html") || strings.Contains(frag, `class="kpis"`) || !strings.Contains(frag, `id="students-table"`) ||
+		rowRE.FindAllString(frag, -1) == nil {
+		t.Errorf("fragment:\n%s", frag)
+	}
+	// Restoring history after a reload needs the whole page.
+	if full := get("per=2", map[string]string{"HX-Request": "true", "HX-Target": "students-table", "HX-History-Restore-Request": "true"}); !strings.Contains(full, "<html") {
+		t.Error("history restore did not get the full page")
+	}
+	// CSV: same filter and order, all pages.
+	w := ts.do(req{method: "GET", path: "/admin/dashboard.csv?group=A&sort=name&per=1&page=2", ip: staffIP, cookie: admin})
+	var names []string
+	for _, line := range strings.Split(w.Body.String(), "\n")[1:] {
+		if f := strings.Split(line, ","); len(f) > 1 {
+			names = append(names, strings.Fields(f[1])[0])
+		}
+	}
+	if got := strings.Join(names, ","); got != "Борисов,Валиева,Гаврилов" {
+		t.Errorf("CSV rows: %s", got)
+	}
+}
+
+func TestCompareNames(t *testing.T) {
+	// Russian order: case and ё do not matter; Cyrillic before Latin.
+	sorted := []string{"Алиев Бек", "алиев Ерлан", "Ёлкина Анна", "Ершов Дан", "Яковлева Яна", "Adams Kate", "zed"}
+	for i := 1; i < len(sorted); i++ {
+		if compareNames(sorted[i-1], sorted[i]) >= 0 || compareNames(sorted[i], sorted[i-1]) <= 0 {
+			t.Errorf("%q should come before %q", sorted[i-1], sorted[i])
+		}
+	}
+	if compareNames("Ёлкин", "елкин") != 0 {
+		t.Error("ё and е should compare equal")
+	}
+}
