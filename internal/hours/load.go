@@ -132,3 +132,22 @@ func (c Calc) Today(ctx context.Context, q store.Querier, studentID int64, now t
 	}
 	return 0, nil
 }
+
+// TodayAndWeek returns a student's totals for the local day containing now
+// (from 00:00) and for the week containing it (from Monday 00:00). Both come
+// from one Load of the week, so they always agree with the Hours screen.
+func (c Calc) TodayAndWeek(ctx context.Context, q store.Querier, studentID int64, now time.Time) (today, week time.Duration, err error) {
+	w := c.PeriodAt("week", now)
+	visits, err := Load(ctx, q, w.From, w.To, studentID)
+	if err != nil {
+		return 0, 0, err
+	}
+	if r := c.Summarize(visits, w.From, w.To)[studentID]; r != nil {
+		week = r.Total
+	}
+	d := c.PeriodAt("day", now)
+	if r := c.Summarize(visits, d.From, d.To)[studentID]; r != nil {
+		today = r.Total
+	}
+	return today, week, nil
+}

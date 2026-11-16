@@ -28,7 +28,7 @@ Only one student is checked in at a PC at a time. If someone else scans the
 code on the PC you are using, your visit ends and the bot tells you. Scan
 again if you are still there.
 
-`/status` shows your current visit and today's hours.
+`/status` shows your current visit and your hours today (from 00:00) and this week (from Monday 00:00).
 
 ## What is recorded
 

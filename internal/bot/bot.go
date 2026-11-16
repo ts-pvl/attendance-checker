@@ -343,17 +343,18 @@ func (b *Bot) statusText(ctx context.Context, now time.Time, tgUser int64) (stri
 	if st == nil || st.Archived {
 		return b.t("bot.not_linked"), nil
 	}
-	today, err := b.Calc.Today(ctx, b.DB, st.ID, now)
+	today, week, err := b.Calc.TodayAndWeek(ctx, b.DB, st.ID, now)
 	if err != nil {
 		return "", err
 	}
+	totals := b.t("bot.status_totals", i18n.Duration(b.Lang, today), i18n.Duration(b.Lang, week))
 	var host string
 	var since int64
 	err = b.DB.QueryRowContext(ctx, "SELECT host, confirmed_at FROM presence WHERE student_id = ? AND ended_at IS NULL", st.ID).Scan(&host, &since)
 	if err != nil {
-		return b.t("bot.status_none", i18n.Duration(b.Lang, today)), nil
+		return b.t("bot.status_none") + "\n" + totals, nil
 	}
-	return b.t("bot.status_open", host, b.clock(store.FromMs(since)), i18n.Duration(b.Lang, today)), nil
+	return b.t("bot.status_open", host, b.clock(store.FromMs(since))) + "\n" + totals, nil
 }
 
 // Notify queues a message for every visit that closed on its own (idle
@@ -402,7 +403,7 @@ func (b *Bot) sender(ctx context.Context) {
 // SetupCommands registers the command menu shown in Telegram clients.
 func SetupCommands(ctx context.Context, api *API, lang string) error {
 	desc := map[string][2]string{
-		"status":   {"Current visit and today's hours", "Текущее посещение и часы за сегодня"},
+		"status":   {"Current visit, hours today and this week", "Текущее посещение, часы за сегодня и за неделю"},
 		"checkout": {"Check out now", "Отметить уход сейчас"},
 		"help":     {"How to check in", "Как отметиться"},
 	}

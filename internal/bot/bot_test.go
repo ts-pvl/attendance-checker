@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/netip"
@@ -117,7 +118,7 @@ func TestBotFlow(t *testing.T) {
 	}
 	e.now = e.now.Add(90 * time.Second)
 	e.ci.Engine.AgentEvent(ctx, e.now, "PC-17", core.KindHeartbeat, "s", sql.NullInt64{Int64: 0, Valid: true})
-	if got := e.send(alice, "private", "/status"); got != "Checked in at PC-17 since 14:00. Today: 1 min." {
+	if got := e.send(alice, "private", "/status"); got != "Checked in at PC-17 since 14:00.\nToday: 1 min.\nThis week: 1 min." {
 		t.Errorf("status: %q", got)
 	}
 	if got := e.send(alice, "private", "/checkout"); got != "Checked out at 14:01. Today: 1 min." {
@@ -217,5 +218,60 @@ func TestParseCommand(t *testing.T) {
 		if c, a := parseCommand(in); c != want[0] || a != want[1] {
 			t.Errorf("%q -> %q %q", in, c, a)
 		}
+	}
+}
+
+// /status shows two totals: today from 00:00 and this week from Monday 00:00,
+// both in local time. The clock is Tuesday 2026-03-10 14:00. Expected values
+// are computed by hand:
+//
+//	Sat 03-07 10:00–11:00            last week: counts nowhere
+//	Sun 03-08 23:30 – Mon 03-09 00:20  only the 20 min after Monday 00:00
+//	Mon 03-09 09:00–10:30            90 min
+//	Tue 03-10 08:00–08:45            45 min, today
+//
+// Today = 45 min. This week = 20 + 90 + 45 = 155 min = 2 h 35 min.
+func TestStatusTodayAndWeek(t *testing.T) {
+	e := newBotEnv(t)
+	loc := e.now.Location()
+	ms := func(day, hh, mm int) int64 {
+		return time.Date(2026, 3, day, hh, mm, 0, 0, loc).UnixMilli()
+	}
+	visits := [][2]int64{
+		{ms(7, 10, 0), ms(7, 11, 0)},
+		{ms(8, 23, 30), ms(9, 0, 20)},
+		{ms(9, 9, 0), ms(9, 10, 30)},
+		{ms(10, 8, 0), ms(10, 8, 45)},
+	}
+	for i, v := range visits {
+		if _, err := e.db.Exec(`INSERT INTO sessions(id, host, sid, started_at, last_seen_at, last_activity_at, ended_at, end_reason)
+			VALUES(?, 'PC-17', ?, ?, ?, ?, ?, 'logout')`, i+1, fmt.Sprint("s", i), v[0], v[1], v[1], v[1]); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.db.Exec(`INSERT INTO presence(student_id, host, session_id, confirmed_at, ended_at, end_reason)
+			VALUES(1, 'PC-17', ?, ?, ?, 'logout')`, i+1, v[0], v[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.db.Exec("INSERT INTO telegram_links(student_id, tg_user_id, linked_at) VALUES(1, 777, 0)"); err != nil {
+		t.Fatal(err)
+	}
+	want := "You're not checked in right now.\nToday: 45 min.\nThis week: 2 h 35 min."
+	if got := e.send(777, "private", "/status"); got != want {
+		t.Errorf("status: %q, want %q", got, want)
+	}
+
+	// Sunday 23:00 is still the same week; nothing happened that day.
+	e.now = time.Date(2026, 3, 15, 23, 0, 0, 0, loc)
+	want = "You're not checked in right now.\nToday: 0 min.\nThis week: 2 h 35 min."
+	if got := e.send(777, "private", "/status"); got != want {
+		t.Errorf("status on Sunday: %q, want %q", got, want)
+	}
+
+	// Next Monday 00:10: a new day and a new week, so both start from zero.
+	e.now = time.Date(2026, 3, 16, 0, 10, 0, 0, loc)
+	want = "You're not checked in right now.\nToday: 0 min.\nThis week: 0 min."
+	if got := e.send(777, "private", "/status"); got != want {
+		t.Errorf("status on Monday: %q, want %q", got, want)
 	}
 }
