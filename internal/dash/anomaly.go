@@ -6,8 +6,7 @@ import (
 )
 
 // Anomaly rules for the new Anomalies page. The thresholds come from the
-// config (anomaly_low_activity_gap, anomaly_long_visit, anomaly_late_from,
-// anomaly_late_to).
+// config (anomaly_low_activity_gap, anomaly_long_visit, anomaly_latency).
 
 // ActivePing: the agent pings every 60 s with the time since the last input,
 // so a ping with less idle time than this saw activity since the one before.
@@ -60,14 +59,10 @@ func ActivityGap(start, end time.Time, pings []Ping) (median time.Duration, acti
 	return (gaps[n/2-1] + gaps[n/2]) / 2, active, true
 }
 
-// IsLate reports whether t (local time of day) falls in [from, to); the
-// window may cross midnight (21:00–05:00). from and to are offsets from
-// local midnight.
-func IsLate(t time.Time, loc *time.Location, from, to time.Duration) bool {
-	lt := t.In(loc)
-	tod := time.Duration(lt.Hour())*time.Hour + time.Duration(lt.Minute())*time.Minute + time.Duration(lt.Second())*time.Second
-	if from <= to {
-		return tod >= from && tod < to
-	}
-	return tod >= from || tod < to
+// IsOldScan reports whether a check-in used an old QR code: the code was
+// scanned more than limit after it appeared on the screen, or the screen was
+// already showing a newer code (stale). This is the same rule as the "slow
+// or old-code scans" list of the old Anomalies page.
+func IsOldScan(stale bool, latency, limit time.Duration) bool {
+	return stale || latency > limit
 }

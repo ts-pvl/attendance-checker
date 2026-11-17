@@ -24,7 +24,7 @@ var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanoma
 
 type anomListData struct {
 	Visits []anomVisit
-	Extra  string // "gap" adds the activity columns, "flags" the anomaly list
+	Extra  string // "gap" adds the activity columns, "age" the code age, "flags" the anomaly list
 }
 
 type perSelectData struct {

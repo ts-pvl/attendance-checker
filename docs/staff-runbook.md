@@ -67,11 +67,13 @@ The Anomalies tab of the new interface adds four lists for the chosen period
   again (median gap of 10 minutes or more). Someone may have left the PC
   logged in, or something may be keeping it awake.
 * *Long sessions*: visits longer than 6 hours.
-* *Late scans*: check-ins between 21:00 and 05:00.
+* *Old QR code scans*: the student scanned a code that was more than 45 seconds
+  old, or one the screen had already replaced with a newer code. It can mean a
+  photo of the screen was sent to someone.
 * *Sessions with 2–3 anomalies*: visits that are in two or three of these lists.
 
 The thresholds are settings in `attendance.conf` (`anomaly_low_activity_gap`,
-`anomaly_long_visit`, `anomaly_late_from`, `anomaly_late_to`).
+`anomaly_long_visit`, `anomaly_latency`).
 
 ## Staff accounts (on the server)
 

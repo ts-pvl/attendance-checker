@@ -60,8 +60,6 @@ type Config struct {
 	// New admin UI anomalies.
 	AnomalyLowActivityGap time.Duration // median gap between active pings at or above this: low activity
 	AnomalyLongVisit      time.Duration // visits longer than this
-	AnomalyLateFrom       Clock         // check-ins in [late_from, late_to) are late (may cross midnight)
-	AnomalyLateTo         Clock
 	AlertAfter            time.Duration // /healthz turns red after this long without heartbeats or bot polls
 }
 
@@ -108,8 +106,6 @@ func Default() *Config {
 		AnomalyMultiPC:         15 * time.Minute,
 		AnomalyLowActivityGap:  10 * time.Minute,
 		AnomalyLongVisit:       6 * time.Hour,
-		AnomalyLateFrom:        Clock{21, 0},
-		AnomalyLateTo:          Clock{5, 0},
 		AlertAfter:             15 * time.Minute,
 	}
 }
@@ -237,10 +233,9 @@ func (c *Config) set(k, v string) error {
 		dur(&c.AnomalyLowActivityGap)
 	case "anomaly_long_visit":
 		dur(&c.AnomalyLongVisit)
-	case "anomaly_late_from":
-		c.AnomalyLateFrom, err = parseClock(v)
-	case "anomaly_late_to":
-		c.AnomalyLateTo, err = parseClock(v)
+	case "anomaly_late_from", "anomaly_late_to":
+		// No longer used (the late-scan list became the old-code list).
+		// Still accepted, so that an existing attendance.conf keeps working.
 	case "alert_after":
 		dur(&c.AlertAfter)
 	default:

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -192,16 +191,18 @@ type anomVisit struct {
 	Active     int           // active pings
 	Low        bool
 	Long       bool
-	Late       bool
+	Old        bool  // scanned an old QR code (dash.IsOldScan)
+	LatencyMs  int64 // age of the code when it was scanned
+	Stale      bool  // the screen was already showing a newer code
 	Flags      []string
 }
 
 type nAnomData struct {
-	From, To         string
-	Gap, LongVisit   time.Duration
-	LateFrom, LateTo string
-	Low, Long, Late  []anomVisit
-	Multi            []anomVisit
+	From, To       string
+	Gap, LongVisit time.Duration
+	Latency        time.Duration
+	Low, Long, Old []anomVisit
+	Multi          []anomVisit
 }
 
 func (s *Server) handleNewAnomalies(w http.ResponseWriter, r *http.Request) {
@@ -214,19 +215,16 @@ func (s *Server) handleNewAnomalies(w http.ResponseWriter, r *http.Request) {
 }
 
 // newAnomalies flags the visits whose check-in falls in the period (default
-// the last 7 days) as low-activity, long or late; visits with two or three
+// the last 7 days) as low-activity, long or old-code; visits with two or three
 // of these are listed again together. Manual visits added by staff have no
 // check-in and no pings and are not judged.
 func (s *Server) newAnomalies(r *http.Request) (*nAnomData, error) {
 	ctx := r.Context()
-	loc := s.Cfg.Timezone
 	from, last := s.dateRange(r.URL.Query(), "from", "to", s.Calc.PeriodAt("week", s.Now())) // default: this week
 	to := s.Calc.DayStart(last.AddDate(0, 0, 1).Add(12 * time.Hour))
 	c := s.Cfg
 	d := &nAnomData{From: from.Format("2006-01-02"), To: to.AddDate(0, 0, -1).Format("2006-01-02"),
-		Gap: c.AnomalyLowActivityGap, LongVisit: c.AnomalyLongVisit,
-		LateFrom: fmt.Sprintf("%02d:%02d", c.AnomalyLateFrom.Hour, c.AnomalyLateFrom.Minute),
-		LateTo:   fmt.Sprintf("%02d:%02d", c.AnomalyLateTo.Hour, c.AnomalyLateTo.Minute)}
+		Gap: c.AnomalyLowActivityGap, LongVisit: c.AnomalyLongVisit, Latency: c.AnomalyLatency}
 
 	visits, err := hours.Load(ctx, s.DB, from, to, 0)
 	if err != nil {
@@ -257,7 +255,7 @@ func (s *Server) newAnomalies(r *http.Request) (*nAnomData, error) {
 	}
 	for _, v := range judged {
 		a := anomVisit{Student: students[v.StudentID], Host: v.Host, Scan: v.Start, Start: v.Start, End: v.End,
-			Open: v.Open, Duration: v.Duration()}
+			Open: v.Open, Duration: v.Duration(), LatencyMs: v.LatencyMs, Stale: v.Stale}
 		if v.Edited {
 			a.Scan = v.OrigStart
 		}
@@ -266,11 +264,11 @@ func (s *Server) newAnomalies(r *http.Request) (*nAnomData, error) {
 		a.Gap, a.Active = gap, active
 		a.Low = ok && gap >= c.AnomalyLowActivityGap
 		a.Long = a.Duration > c.AnomalyLongVisit
-		a.Late = dash.IsLate(a.Scan, loc, c.AnomalyLateFrom.Offset(), c.AnomalyLateTo.Offset())
+		a.Old = dash.IsOldScan(v.Stale, time.Duration(v.LatencyMs)*time.Millisecond, c.AnomalyLatency)
 		for _, f := range []struct {
 			on  bool
 			key string
-		}{{a.Low, "nanom.f_low"}, {a.Long, "nanom.f_long"}, {a.Late, "nanom.f_late"}} {
+		}{{a.Low, "nanom.f_low"}, {a.Long, "nanom.f_long"}, {a.Old, "nanom.f_old"}} {
 			if f.on {
 				a.Flags = append(a.Flags, s.t(f.key))
 			}
@@ -281,15 +279,15 @@ func (s *Server) newAnomalies(r *http.Request) (*nAnomData, error) {
 		if a.Long {
 			d.Long = append(d.Long, a)
 		}
-		if a.Late {
-			d.Late = append(d.Late, a)
+		if a.Old {
+			d.Old = append(d.Old, a)
 		}
 		if len(a.Flags) >= 2 {
 			d.Multi = append(d.Multi, a)
 		}
 	}
 	newestFirst := func(x, y anomVisit) int { return y.Scan.Compare(x.Scan) }
-	for _, l := range [][]anomVisit{d.Low, d.Long, d.Late, d.Multi} {
+	for _, l := range [][]anomVisit{d.Low, d.Long, d.Old, d.Multi} {
 		slices.SortStableFunc(l, newestFirst)
 	}
 	return d, nil

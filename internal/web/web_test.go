@@ -729,9 +729,16 @@ func TestNewJournalPaging(t *testing.T) {
 
 // Anomalies through the real path: linked students, PC sessions, QR scans
 // and agent pings. Expected lists by hand:
-//   - Alice, PC-01, 21:30 → 03:40: long (6 h 09 min) and late (21:31), active
-//     every minute → in "long", "late" and "2–3 anomalies".
+//   - Alice, PC-01, 21:30 → 03:40: long (6 h 09 min), active every minute,
+//     scanned a 5 s old code that was still on screen → only in "long". The
+//     time of day (21:31) does not matter.
 //   - Bob, PC-01, 07:00 → 08:00: active only every 15 minutes → low activity.
+//     He scanned a 40 s old code (under the 45 s limit) after the screen had
+//     moved on to a newer one → old code. Two anomalies → "2–3 anomalies".
+//   - Carol, PC-02, 20:00 → 22:00: scanned a 50 s old code (over the 45 s
+//     limit) that was still the one on screen → only in "old code".
+//
+// Old-code list, newest check-in first: Bob (03-10 07:00), Carol (03-09 20:00).
 func TestNewAnomalies(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
@@ -769,7 +776,11 @@ func TestNewAnomalies(t *testing.T) {
 	// Bob: input at 07:15, 07:30, 07:45, 08:00 only.
 	start = at("2026-03-10", "07:00")
 	e.AgentEvent(ctx, start, "PC-01", core.KindSessionStart, "s2", sql.NullInt64{})
-	scan(start, 502)
+	oldTok, _ := ts.s.Board.Current(pc.ID, start.Add(-40*time.Second))
+	ts.s.Board.Current(pc.ID, start.Add(-5*time.Second)) // 35 s later the screen shows a newer code
+	if r, err := ts.s.Checkin.Scan(ctx, start, 502, oldTok); err != nil || r.Result != core.ScanOK {
+		t.Fatalf("Bob's scan: %v %+v", err, r)
+	}
 	lastInput := start
 	end = at("2026-03-10", "08:00")
 	for tm := start.Add(time.Minute); tm.Before(end); tm = tm.Add(time.Minute) {
@@ -780,12 +791,12 @@ func TestNewAnomalies(t *testing.T) {
 	}
 	e.AgentEvent(ctx, end, "PC-01", core.KindLogout, "s2", ms(0))
 
-	// Carol, PC-02, 20:00 → 22:00, active: checked in before 21:00, so not
-	// late although the visit ends after it; not long; not low activity.
+	// Carol, PC-02, 20:00 → 22:00, active: not long, not low activity. Her
+	// code is 50 s old and still the one on screen.
 	pc2, _ := ts.s.Hosts.ByName("PC-02")
 	start = at("2026-03-09", "20:00")
 	e.AgentEvent(ctx, start, "PC-02", core.KindSessionStart, "s3", sql.NullInt64{})
-	tok, _ := ts.s.Board.Current(pc2.ID, start.Add(-5*time.Second))
+	tok, _ := ts.s.Board.Current(pc2.ID, start.Add(-50*time.Second))
 	if r, err := ts.s.Checkin.Scan(ctx, start, 503, tok); err != nil || r.Result != core.ScanOK {
 		t.Fatalf("Carol's scan: %v %+v", err, r)
 	}
@@ -807,8 +818,12 @@ func TestNewAnomalies(t *testing.T) {
 		}
 		return strings.Join(out, ",")
 	}
-	if names(d.Low) != "Bob" || names(d.Long) != "Alice" || names(d.Late) != "Alice" || names(d.Multi) != "Alice" {
-		t.Errorf("low %q long %q late %q multi %q", names(d.Low), names(d.Long), names(d.Late), names(d.Multi))
+	if names(d.Low) != "Bob" || names(d.Long) != "Alice" || names(d.Old) != "Bob,Carol" || names(d.Multi) != "Bob" {
+		t.Errorf("low %q long %q old %q multi %q", names(d.Low), names(d.Long), names(d.Old), names(d.Multi))
+	}
+	if len(d.Old) == 2 && (!d.Old[0].Stale || d.Old[0].LatencyMs != 40_000 || d.Old[1].Stale || d.Old[1].LatencyMs != 50_000) {
+		t.Errorf("Bob: superseded %v, %d ms; Carol: superseded %v, %d ms; want true 40000, false 50000",
+			d.Old[0].Stale, d.Old[0].LatencyMs, d.Old[1].Stale, d.Old[1].LatencyMs)
 	}
 	// Bob's moments of input: 07:00, 07:15, 07:30, 07:45 and the end, 08:00:
 	// four 15-minute gaps. Active pings (idle under 90 s): 07:01, 07:15, 07:16,
@@ -816,8 +831,8 @@ func TestNewAnomalies(t *testing.T) {
 	if len(d.Low) == 1 && (d.Low[0].Gap != 15*time.Minute || d.Low[0].Active != 7) {
 		t.Errorf("Bob: median gap %v, active pings %d; want 15m, 7", d.Low[0].Gap, d.Low[0].Active)
 	}
-	if len(d.Multi) == 1 && strings.Join(d.Multi[0].Flags, ",") != i18n.T(ts.s.Cfg.Lang, "nanom.f_long")+","+i18n.T(ts.s.Cfg.Lang, "nanom.f_late") {
-		t.Errorf("Alice's flags: %v", d.Multi[0].Flags)
+	if len(d.Multi) == 1 && strings.Join(d.Multi[0].Flags, ",") != i18n.T(ts.s.Cfg.Lang, "nanom.f_low")+","+i18n.T(ts.s.Cfg.Lang, "nanom.f_old") {
+		t.Errorf("Bob's flags: %v", d.Multi[0].Flags)
 	}
 	admin, _ := ts.login("boss")
 	if w := ts.do(req{method: "GET", path: "/admin/new/anomalies?from=2026-03-09&to=2026-03-10", ip: staffIP, cookie: admin}); w.Code != 200 ||

@@ -36,8 +36,7 @@ admin_from_lab_pcs = true
 	if c.BotUsername != "SchoolBot" || c.Lang != "en" || c.QRRotate != 45*time.Second ||
 		c.CleanupAt != (Clock{3, 15}) || c.HoursRounding != 5*time.Minute || len(c.AdminNetworks) != 2 ||
 		!c.AdminFromLabPCs || c.Timezone.String() != "Asia/Almaty" || c.SchoolName != "My School" ||
-		c.AnomalyLongVisit != 5*time.Hour || c.AnomalyLateFrom != (Clock{22, 30}) || c.AnomalyLateTo != (Clock{5, 0}) ||
-		c.AnomalyLowActivityGap != 10*time.Minute || c.AnomalyLateFrom.Offset() != 22*time.Hour+30*time.Minute {
+		c.AnomalyLongVisit != 5*time.Hour || c.AnomalyLowActivityGap != 10*time.Minute {
 		t.Errorf("%+v", c)
 	}
 }

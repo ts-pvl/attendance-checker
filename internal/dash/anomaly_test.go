@@ -59,20 +59,23 @@ func TestActivityGap(t *testing.T) {
 	}
 }
 
-func TestIsLate(t *testing.T) {
-	h := func(hh, mm int) time.Duration { return time.Duration(hh)*time.Hour + time.Duration(mm)*time.Minute }
-	at := func(s string) time.Time { return A("2026-03-10 " + s) }
-	night := []struct {
-		at   string
-		late bool
-	}{{"20:59", false}, {"21:00", true}, {"23:30", true}, {"00:10", true}, {"04:59", true}, {"05:00", false}, {"12:00", false}}
-	for _, c := range night {
-		if got := IsLate(at(c.at), almaty, h(21, 0), h(5, 0)); got != c.late {
-			t.Errorf("21:00–05:00, %s: %v", c.at, got)
+func TestIsOldScan(t *testing.T) {
+	const limit = 45 * time.Second
+	for _, c := range []struct {
+		name    string
+		stale   bool
+		latency time.Duration
+		old     bool
+	}{
+		{"fresh code on screen", false, 5 * time.Second, false},
+		{"exactly at the limit", false, 45 * time.Second, false},
+		{"just over the limit", false, 45*time.Second + time.Millisecond, true},
+		{"over the limit", false, 50 * time.Second, true},
+		{"young code, but the screen showed a newer one", true, 10 * time.Second, true},
+		{"both", true, 55 * time.Second, true},
+	} {
+		if got := IsOldScan(c.stale, c.latency, limit); got != c.old {
+			t.Errorf("%s: %v, want %v", c.name, got, c.old)
 		}
-	}
-	// A window that does not cross midnight.
-	if !IsLate(at("13:30"), almaty, h(13, 0), h(14, 0)) || IsLate(at("14:00"), almaty, h(13, 0), h(14, 0)) {
-		t.Error("13:00–14:00 window")
 	}
 }

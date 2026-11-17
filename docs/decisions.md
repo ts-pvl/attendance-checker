@@ -25,7 +25,7 @@ implementation does. Each item says where to change it.
 
 ## Left open or out of scope for version 1
 
-* **Late scans / grace periods (10.2 #9).** There is no lesson schedule in the system (the area is open 24/7 with sit-anywhere), so arrivals are never marked late against a lesson. The new admin UI only lists check-ins late in the day (21:00–05:00 by default) as an anomaly (see *New anomaly categories*).
+* **Late scans / grace periods (10.2 #9).** There is no lesson schedule in the system (the area is open 24/7 with sit-anywhere), so arrivals are never marked late against a lesson. The time of day of a check-in is not an anomaly either.
 * **Data retention (10.2 #7).** Nothing is deleted automatically except, optionally, raw heartbeat events (`heartbeat_retention_days`). Decide with whoever owns data protection.
 * **Fallback without a phone (10.2 #10).** Staff add the visit manually with a reason (Student page → Add a missed visit).
 * **Agent event queue.** Spec 10.1 suggests the agent queue events while the server is down. Delayed events would carry the wrong time because the server uses only its own clock. So the agent retries briefly (idle logout 3 times) and gives up. An outage longer than 3 minutes closes visits at the last activity seen, and staff correct them manually.
@@ -59,5 +59,5 @@ implementation does. Each item says where to change it.
 * **New anomaly categories** (new UI; the old UI keeps its own). All look at visits checked in during the chosen period, by default the current week. Manual visits added by staff are left out, since they have no check-in and no pings.
   * *Low activity:* the agent pings every 60 s with the time since the last input, and a ping with less than 90 s of idle time is active. The moments of activity are the check-in, the last input before each active ping, and the end of the visit. A visit is flagged when the median gap between them is at least `anomaly_low_activity_gap` (10 min). Visits under 30 min, or with no pings (pruned or manual), are not judged.
   * *Long:* the visit is longer than `anomaly_long_visit` (6 h).
-  * *Late scan:* the check-in falls between `anomaly_late_from` and `anomaly_late_to` (21:00–05:00, local time). The window may cross midnight.
+  * *Old QR code scan:* the code was scanned more than `anomaly_latency` (45 s) after it appeared on the screen, or the screen was already showing a newer code. It is the same rule as the old UI's *Slow or old-code scans* list, applied to visits. This list replaced *Late scans* (check-ins between 21:00 and 05:00). The settings `anomaly_late_from` and `anomaly_late_to` are still accepted in `attendance.conf` and ignored, so an existing file keeps working.
   * *2–3 anomalies:* visits in two or three of the lists above.

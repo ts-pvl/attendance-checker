@@ -20,9 +20,9 @@
 </section>
 
 <section class="card">
-  <div class="c-head"><h2>{{t "nanom.late"}} <span class="count">{{len .Late}}</span></h2></div>
-  <p class="muted hint">{{t "nanom.late_hint" .LateFrom .LateTo}}</p>
-  {{if .Late}}{{template "anom-visits" (anomList .Late "")}}{{end}}
+  <div class="c-head"><h2>{{t "nanom.old"}} <span class="count">{{len .Old}}</span></h2></div>
+  <p class="muted hint">{{t "nanom.old_hint" (ms .Latency.Milliseconds)}}</p>
+  {{if .Old}}{{template "anom-visits" (anomList .Old "age")}}{{end}}
 </section>
 
 <section class="card">
@@ -40,6 +40,7 @@
     <th><span class="th">{{t "nanom.scan"}}</span></th><th><span class="th">{{t "c.student"}}</span></th><th><span class="th">{{t "c.pc"}}</span></th>
     <th><span class="th">{{t "c.start"}}</span></th><th><span class="th">{{t "c.end"}}</span></th><th class="num"><span class="th">{{t "c.duration"}}</span></th>
     {{if eq .Extra "gap"}}<th class="num"><span class="th">{{t "nanom.gap"}}</span></th><th class="num"><span class="th">{{t "nanom.active"}}</span></th>{{end}}
+    {{if eq .Extra "age"}}<th><span class="th">{{t "nanom.code_age"}}</span></th>{{end}}
     {{if eq .Extra "flags"}}<th><span class="th">{{t "nanom.flags"}}</span></th>{{end}}
   </tr></thead>
   <tbody>
@@ -52,6 +53,7 @@
     <td>{{if .Open}}<span class="pill ok">{{reason ""}}</span>{{else}}{{clock .End}}{{if ne (date .Start) (date .End)}} <small>({{date .End}})</small>{{end}}{{end}}</td>
     <td class="num">{{dur .Duration}}</td>
     {{if eq $.Extra "gap"}}<td class="num">{{dur .Gap}}</td><td class="num">{{.Active}}</td>{{end}}
+    {{if eq $.Extra "age"}}<td>{{ms .LatencyMs}}{{if .Stale}} <span class="pill warn">{{t "nanom.superseded"}}</span>{{end}}</td>{{end}}
     {{if eq $.Extra "flags"}}<td>{{range .Flags}}<span class="pill warn">{{.}}</span> {{end}}</td>{{end}}
   </tr>
   {{end}}

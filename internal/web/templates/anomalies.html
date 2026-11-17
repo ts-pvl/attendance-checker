@@ -8,7 +8,7 @@
 </form>
 
 <h2>{{t "anom.latency"}} <span class="count">{{len .Slow}}</span></h2>
-<p class="muted">{{t "anom.latency_hint" (dur .Latency)}}</p>
+<p class="muted">{{t "anom.latency_hint" (ms .Latency.Milliseconds)}}</p>
 {{if .Slow}}
 <div class="scroll"><table>
   <thead><tr><th>{{t "c.when"}}</th><th>{{t "c.student"}}</th><th>{{t "c.pc"}}</th><th>{{t "c.details"}}</th></tr></thead>
