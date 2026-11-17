@@ -49,6 +49,27 @@ func TestDuration(t *testing.T) {
 	}
 }
 
+// 23 h 59 min is still hours; 24 h is 1 d 00 h; 2 days 5 h 59 min drops the minutes.
+func TestSpan(t *testing.T) {
+	cases := []struct {
+		d      time.Duration
+		en, ru string
+	}{
+		{45 * time.Minute, "45 min", "45 мин"},
+		{23*time.Hour + 59*time.Minute, "23 h 59 min", "23 ч 59 мин"},
+		{24 * time.Hour, "1 d 00 h", "1 д 00 ч"},
+		{53*time.Hour + 59*time.Minute, "2 d 05 h", "2 д 05 ч"},
+	}
+	for _, c := range cases {
+		if got := Span("en", c.d); got != c.en {
+			t.Errorf("en %v: %q", c.d, got)
+		}
+		if got := Span("ru", c.d); got != c.ru {
+			t.Errorf("ru %v: %q", c.d, got)
+		}
+	}
+}
+
 func TestPlural(t *testing.T) {
 	ru := map[int]string{1: "1 учебный день", 2: "2 учебных дня", 4: "4 учебных дня", 5: "5 учебных дней", 11: "11 учебных дней",
 		12: "12 учебных дней", 21: "21 учебный день", 22: "22 учебных дня", 27: "27 учебных дней", 111: "111 учебных дней"}

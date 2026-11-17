@@ -10,8 +10,8 @@ the next login opens the one used last.
 * **Dashboard** (new): hours, students present, load by hour and weekday, the
   attendance matrix and a table of all students for a chosen period (the
   current week by default; the matrix has its own period, the current month by
-  default). Its tabs are Students, Anomalies and Journal (admins), with the same
-  actions as the old pages.
+  default). Its tabs are Today, Students, Anomalies and Journal (admins).
+  Students, Anomalies and Journal have the same actions as the old pages.
 * **Admin** (old): Today, Hours, Students, Anomalies and Audit log, as below.
 
 ## Morning check (30 seconds)
@@ -29,6 +29,26 @@ In the PC table, yellow rows are PCs with a session but no check-in. Remind thos
 
 If something looks wrong, check whether the service is running (see *Restart*).
 Enter visits missed during an outage as corrections (below).
+
+### The room at a glance (new interface)
+
+The **Today** tab of the new interface shows every PC as a tile, laid out like
+the room. The page refreshes itself every 30 seconds.
+
+| Tile | Meaning |
+|---|---|
+| Blue, with a name | that student is checked in, and for how long |
+| Orange, "no check-in" | someone is logged in but has not scanned the code, and for how long |
+| Grey, "inactive" | nobody is logged in, and how long ago the last login ended |
+
+Below the grid is the list of sessions that ended today, most recent first. It
+can be sorted by PC, session length or time since the end, filtered by group
+and split into pages.
+
+Admins can make the grid match the room: set the number of rows and columns
+and press *Save*, then drag a PC onto another one to swap them, or onto an
+empty cell to move it. *Reset layout* puts everything back (5 rows of 10, in
+name order). The layout is shared by all staff, and changes are in the Journal.
 
 ## Common tasks
 

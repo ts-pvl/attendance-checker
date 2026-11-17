@@ -84,6 +84,8 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("GET /admin/ui/{which}", s.staff(s.handleUISwitch))
 	mux.Handle("GET /admin/dashboard", s.staff(s.handleDashboard))
 	mux.Handle("GET /admin/dashboard.csv", s.staff(s.handleDashboardCSV))
+	mux.Handle("GET /admin/new/today", s.staff(s.handleNewToday))
+	mux.Handle("POST /admin/new/today/layout", s.admin(s.handleTodayLayout))
 	mux.Handle("GET /admin/new/students", s.staff(s.handleNewStudents))
 	mux.Handle("GET /admin/new/students/slips", s.staff(s.handleNewSlips))
 	mux.Handle("GET /admin/new/students/{id}", s.staff(s.handleNewStudent))

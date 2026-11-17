@@ -46,6 +46,16 @@ func Duration(lang string, d time.Duration) string {
 	return T(lang, "dur.hmin", m/60, m%60)
 }
 
+// Span formats a long stretch of time: like Duration below 24 hours, then
+// whole days and hours ("2 d 05 h" / "2 д 05 ч"), rounded down.
+func Span(lang string, d time.Duration) string {
+	if d < 24*time.Hour {
+		return Duration(lang, d)
+	}
+	h := int(d / time.Hour)
+	return T(lang, "dur.dh", h/24, h%24)
+}
+
 // Plural returns key+".one", ".few" or ".many" for n, formatted with n.
 // English uses one/many; Russian one (1, 21…), few (2–4, 22–24…), many.
 func Plural(lang, key string, n int) string {
@@ -121,6 +131,7 @@ var messages = map[string][2]string{
 	// Durations
 	"dur.min":  {"%d min", "%d мин"},
 	"dur.hmin": {"%d h %02d min", "%d ч %02d мин"},
+	"dur.dh":   {"%d d %02d h", "%d д %02d ч"},
 
 	// How a visit ended
 	"reason.idle_logout": {"idle logout", "выход по бездействию"},
@@ -307,37 +318,57 @@ var messages = map[string][2]string{
 	"dash.no_match":         {"No students match these filters.", "Нет студентов с такими фильтрами."},
 
 	// Anomalies of the new UI
-	"nanom.low":         {"Low-activity sessions", "Сессии с низкой активностью"},
-	"nanom.low_hint":    {"Long gaps between active pings, again and again: the typical (median) gap is at least %s. Visits of 30 min or more with agent pings.", "Постоянные большие задержки между активными пингами: типичный (медианный) перерыв не меньше %s. Посещения от 30 минут с данными агента."},
-	"nanom.long":        {"Long sessions", "Длинные сессии"},
-	"nanom.long_hint":   {"Longer than %s.", "Дольше %s."},
-	"nanom.old":         {"Old QR code scans", "Сканы старого QR-кода"},
-	"nanom.old_hint":    {"The code was scanned more than %s after it appeared, or after the screen had already shown a newer code. Can mean a photo or a relayed screen.", "Код отсканирован более чем через %s после появления или когда на экране уже был новый код. Возможно, это фото или пересланный экран."},
-	"nanom.code_age":    {"Code age", "Возраст кода"},
-	"nanom.superseded":  {"newer code on screen", "на экране уже новый код"},
-	"nanom.multi":       {"Sessions with 2–3 anomalies", "Сессии с 2–3 аномалиями"},
-	"nanom.multi_hint":  {"Visits that are in two or three of the lists above.", "Посещения, попавшие в два или три списка выше."},
-	"nanom.gap":         {"Median gap", "Медианный перерыв"},
-	"nanom.active":      {"Active pings", "Активных пингов"},
-	"nanom.flags":       {"Anomalies", "Аномалии"},
-	"nanom.scan":        {"Check-in", "Отметка"},
-	"nanom.f_low":       {"low activity", "низкая активность"},
-	"nanom.f_long":      {"long", "длинная"},
-	"nanom.f_old":       {"old code", "старый код"},
-	"dash.col_student":  {"Student", "Студент"},
-	"dash.col_status":   {"Status", "Статус"},
-	"dash.col_hours":    {"Hours", "Часы"},
-	"dash.col_days":     {"Days", "Дней"},
-	"dash.col_att":      {"Attendance", "Посещаемость"},
-	"dash.col_per_day":  {"H/day", "Ч/день"},
-	"dash.col_sessions": {"Sessions", "Сессий"},
-	"dash.col_arrival":  {"Arrival", "Приход"},
-	"dash.col_last":     {"Last visit", "Последний визит"},
-	"dash.st_active":    {"Active", "Активен"},
-	"dash.st_left":      {"Left", "Выбыл"},
-	"dash.empty":        {"No attendance in this period.", "За этот период посещений нет."},
-	"dash.cell":         {"%s, %s: %s h", "%s, %s: %s ч"},
-	"dash.bar":          {"%s: %s", "%s: %s"},
+	"ntoday.summary":       {"With a student: %d · logged in without a check-in: %d · free: %d", "С учеником: %d · вход без отметки: %d · свободно: %d"},
+	"ntoday.l_busy":        {"student checked in", "ученик отмечен"},
+	"ntoday.l_login":       {"logged in, no check-in", "вход без отметки"},
+	"ntoday.l_free":        {"not in use", "не используется"},
+	"ntoday.no_checkin":    {"no check-in", "без отметки"},
+	"ntoday.inactive":      {"inactive", "неактивен"},
+	"ntoday.never":         {"no sessions yet", "сеансов не было"},
+	"ntoday.rows":          {"Rows", "Рядов"},
+	"ntoday.cols":          {"Columns", "Столбцов"},
+	"ntoday.reset":         {"Reset layout", "Сбросить раскладку"},
+	"ntoday.reset_confirm": {"Put all computers back in name order, 5 rows of 10?", "Вернуть все компьютеры в порядок по именам, 5 рядов по 10?"},
+	"ntoday.drag_hint":     {"Drag a computer onto another one to swap them, or onto an empty cell to move it.", "Перетащите компьютер на другой, чтобы поменять их местами, или на пустую ячейку, чтобы переместить."},
+	"ntoday.bad_size":      {"Rows and columns must be numbers from 1 to %d.", "Число рядов и столбцов должно быть от 1 до %d."},
+	"ntoday.bad_move":      {"That computer could not be moved. Reload the page and try again.", "Не удалось переместить компьютер. Обновите страницу и попробуйте снова."},
+	"ntoday.recent":        {"Recently ended sessions", "Недавно завершённые сессии"},
+	"ntoday.recent_hint":   {"Sessions that ended today, most recent first.", "Сессии, завершившиеся сегодня; сначала самые недавние."},
+	"ntoday.col_len":       {"Session length", "Длительность сессии"},
+	"ntoday.col_ago":       {"Ended", "Завершена"},
+	"ntoday.none":          {"No session has ended today yet.", "Сегодня ещё не завершилась ни одна сессия."},
+	"ntoday.no_match":      {"No sessions in this group.", "В этой группе нет сессий."},
+	"nanom.low":            {"Low-activity sessions", "Сессии с низкой активностью"},
+	"nanom.low_hint":       {"Long gaps between active pings, again and again: the typical (median) gap is at least %s. Visits of 30 min or more with agent pings.", "Постоянные большие задержки между активными пингами: типичный (медианный) перерыв не меньше %s. Посещения от 30 минут с данными агента."},
+	"nanom.long":           {"Long sessions", "Длинные сессии"},
+	"nanom.long_hint":      {"Longer than %s.", "Дольше %s."},
+	"nanom.old":            {"Old QR code scans", "Сканы старого QR-кода"},
+	"nanom.old_hint":       {"The code was scanned more than %s after it appeared, or after the screen had already shown a newer code. Can mean a photo or a relayed screen.", "Код отсканирован более чем через %s после появления или когда на экране уже был новый код. Возможно, это фото или пересланный экран."},
+	"nanom.code_age":       {"Code age", "Возраст кода"},
+	"nanom.superseded":     {"newer code on screen", "на экране уже новый код"},
+	"nanom.multi":          {"Sessions with 2–3 anomalies", "Сессии с 2–3 аномалиями"},
+	"nanom.multi_hint":     {"Visits that are in two or three of the lists above.", "Посещения, попавшие в два или три списка выше."},
+	"nanom.gap":            {"Median gap", "Медианный перерыв"},
+	"nanom.active":         {"Active pings", "Активных пингов"},
+	"nanom.flags":          {"Anomalies", "Аномалии"},
+	"nanom.scan":           {"Check-in", "Отметка"},
+	"nanom.f_low":          {"low activity", "низкая активность"},
+	"nanom.f_long":         {"long", "длинная"},
+	"nanom.f_old":          {"old code", "старый код"},
+	"dash.col_student":     {"Student", "Студент"},
+	"dash.col_status":      {"Status", "Статус"},
+	"dash.col_hours":       {"Hours", "Часы"},
+	"dash.col_days":        {"Days", "Дней"},
+	"dash.col_att":         {"Attendance", "Посещаемость"},
+	"dash.col_per_day":     {"H/day", "Ч/день"},
+	"dash.col_sessions":    {"Sessions", "Сессий"},
+	"dash.col_arrival":     {"Arrival", "Приход"},
+	"dash.col_last":        {"Last visit", "Последний визит"},
+	"dash.st_active":       {"Active", "Активен"},
+	"dash.st_left":         {"Left", "Выбыл"},
+	"dash.empty":           {"No attendance in this period.", "За этот период посещений нет."},
+	"dash.cell":            {"%s, %s: %s h", "%s, %s: %s ч"},
+	"dash.bar":             {"%s: %s", "%s: %s"},
 
 	"wd.0": {"Sun", "Вс"},
 	"wd.1": {"Mon", "Пн"},

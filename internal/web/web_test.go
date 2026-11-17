@@ -563,7 +563,7 @@ func TestNewUIPages(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	core.AddStudent(ctx, ts.s.DB, ts.now, "Alice", "A", "test")
-	pages := []string{"/admin/new/students", "/admin/new/students/1", "/admin/new/students/slips", "/admin/new/anomalies", "/admin/new/journal"}
+	pages := []string{"/admin/new/today", "/admin/new/students", "/admin/new/students/1", "/admin/new/students/slips", "/admin/new/anomalies", "/admin/new/journal"}
 	for _, p := range pages {
 		if w := ts.do(req{method: "GET", path: p, ip: staffIP}); w.Code != http.StatusSeeOther {
 			t.Errorf("%s without login: %d", p, w.Code)

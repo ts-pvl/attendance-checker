@@ -20,7 +20,7 @@ type pageTemplate = template.Template
 var layoutPages = []string{"login", "today", "hours", "students", "student", "slips", "anomalies", "audit"}
 
 // Pages of the new admin UI (nlayout.html).
-var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanomalies", "njournal"}
+var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanomalies", "njournal", "ntoday"}
 
 type anomListData struct {
 	Visits []anomVisit
@@ -54,6 +54,7 @@ func (s *Server) funcs() template.FuncMap {
 	return template.FuncMap{
 		"t":       func(key string, args ...any) string { return i18n.T(lang, key, args...) },
 		"dur":     func(d time.Duration) string { return i18n.Duration(lang, d) },
+		"span":    func(d time.Duration) string { return i18n.Span(lang, d) },
 		"reason":  func(r string) string { return i18n.Reason(lang, r) },
 		"clock":   format("15:04"),
 		"dt":      format("2006-01-02 15:04"),
