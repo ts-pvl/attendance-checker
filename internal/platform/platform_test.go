@@ -30,9 +30,8 @@ const (
 // for events, XP transactions and users. It caps every page of transactions
 // at two rows, as a server-side row limit would.
 type fakePlatform struct {
-	queries     atomic.Int32
-	failUsers   bool // the audit ratio query fails
-	badEventIDs bool
+	queries   atomic.Int32
+	failUsers bool // the audit ratio query fails
 }
 
 type ftx struct {
