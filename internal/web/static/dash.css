@@ -300,3 +300,8 @@ table.list tr.deleted td { opacity: .5; text-decoration: line-through; }
 .filters .field.grow input { width: 100%; }
 .num-input { width: 90px; }
 .sub-h { font-size: 12px; font-weight: 650; color: var(--muted); margin: 14px 0 4px; }
+.small-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 0; }
+.small-kpis .kpi { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; }
+.small-kpis .k-value { font-size: 20px; }
+.c-head .tools form { margin: 0; }
+button.btn[disabled] { opacity: .5; cursor: default; }

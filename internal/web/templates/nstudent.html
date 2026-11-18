@@ -4,7 +4,7 @@
 {{$st := .Student}}{{$ret := .Return}}
 {{$act := printf "/admin/students/%d/visits?period=%s&date=%s" $st.ID .Period.Kind (date .Period.From)}}
 <p class="crumbs"><a href="/admin/new/students">← {{t "students.title"}}</a></p>
-<h1>{{$st.Name}} {{if $st.Group}}<span class="muted h1-sub">{{$st.Group}}</span>{{end}} {{if $st.Archived}}<span class="pill">{{t "students.archived"}}</span>{{end}}</h1>
+<h1>{{$st.Name}} {{if $st.Group}}<span class="muted h1-sub">{{$st.Group}}</span>{{end}} {{if $st.Login}}<span class="muted h1-sub mono">{{$st.Login}}</span>{{end}} {{if $st.Archived}}<span class="pill">{{t "students.archived"}}</span>{{end}}</h1>
 
 <section class="card">
   <h2>{{t "students.tg_account"}}</h2>
@@ -40,10 +40,22 @@
       <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
       <input name="name" value="{{$st.Name}}" required aria-label="{{t "c.name"}}">
       <input name="group" value="{{$st.Group}}" placeholder="{{t "c.group"}}" aria-label="{{t "c.group"}}">
+      <input name="login" value="{{$st.Login}}" placeholder="{{t "students.login"}}" aria-label="{{t "students.login"}}" pattern="@?[A-Za-z0-9][A-Za-z0-9._\-]{0,63}">
       <button class="btn primary">{{t "c.save"}}</button>
     </form>
   </details>
   {{end}}
+</section>
+
+<section class="card" id="platform">
+  <div class="c-head"><h2>{{t "plat.on_platform"}}</h2>{{with $.D.Platform}}<span>{{t "plat.synced_at" (dt .Synced)}}</span>{{end}}</div>
+  {{with $.D.Platform}}
+  <div class="kpis small-kpis">
+    <div class="kpi"><div class="k-label">{{t "plat.col_login"}}</div><div class="k-value mono">{{.Login}}</div><div class="k-sub">{{.Name}}</div></div>
+    <div class="kpi"><div class="k-label">{{t "plat.col_xp"}}</div><div class="k-value">{{.XP}}</div><div class="k-sub">{{t "plat.events_are" .Events}}</div></div>
+    <div class="kpi"><div class="k-label">{{t "plat.col_audit"}}</div><div class="k-value">{{if .HasAudit}}{{printf "%.2f" .Audit}}{{else}}—{{end}}</div><div class="k-sub">{{.Email}}</div></div>
+  </div>
+  {{else}}<p class="muted">{{if $st.Login}}{{t "plat.login_not_found" $st.Login}}{{else}}{{t "plat.no_student_login"}}{{end}}</p>{{end}}
 </section>
 
 <section class="card" id="points">

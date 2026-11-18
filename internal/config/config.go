@@ -61,6 +61,20 @@ type Config struct {
 	AnomalyLowActivityGap time.Duration // median gap between active pings at or above this: low activity
 	AnomalyLongVisit      time.Duration // visits longer than this
 	AlertAfter            time.Duration // /healthz turns red after this long without heartbeats or bot polls
+
+	// Learning platform (internal/platform). The address and events are set
+	// in the admin UI; the access token is kept in this file, which the
+	// service writes itself (default: next to the database).
+	PlatformTokenFile string
+	PlatformSyncEvery time.Duration // 0: sync only on request
+}
+
+// PlatformTokenPath is where the platform access token is kept.
+func (c *Config) PlatformTokenPath() string {
+	if c.PlatformTokenFile != "" {
+		return c.PlatformTokenFile
+	}
+	return filepath.Join(filepath.Dir(c.DBPath), "platform_token")
 }
 
 // Clock is a time of day.
@@ -107,6 +121,7 @@ func Default() *Config {
 		AnomalyLowActivityGap:  10 * time.Minute,
 		AnomalyLongVisit:       6 * time.Hour,
 		AlertAfter:             15 * time.Minute,
+		PlatformSyncEvery:      time.Hour,
 	}
 }
 
@@ -238,6 +253,10 @@ func (c *Config) set(k, v string) error {
 		// Still accepted, so that an existing attendance.conf keeps working.
 	case "alert_after":
 		dur(&c.AlertAfter)
+	case "platform_token_file":
+		c.PlatformTokenFile = v
+	case "platform_sync_every":
+		dur(&c.PlatformSyncEvery)
 	default:
 		return fmt.Errorf("unknown key %q", k)
 	}
@@ -282,6 +301,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("heartbeat_timeout must be at least 1m")
 	case len(c.AdminNetworks) == 0:
 		return fmt.Errorf("admin_networks must not be empty")
+	case c.PlatformSyncEvery != 0 && c.PlatformSyncEvery < 10*time.Minute:
+		return fmt.Errorf("platform_sync_every must be 0 (off) or at least 10m")
 	}
 	return nil
 }

@@ -391,7 +391,7 @@ func (s *Server) studentRows(ctx context.Context, where string, args ...any) ([]
 		codes[id] = store.FromMs(exp)
 	}
 	crows.Close()
-	rows, err := s.DB.QueryContext(ctx, `SELECT s.id, s.name, s.grp, s.archived, l.tg_user_id, COALESCE(l.tg_name, ''), COALESCE(l.tg_username, ''), COALESCE(l.linked_at, 0)
+	rows, err := s.DB.QueryContext(ctx, `SELECT s.id, s.name, s.grp, s.archived, s.login, l.tg_user_id, COALESCE(l.tg_name, ''), COALESCE(l.tg_username, ''), COALESCE(l.linked_at, 0)
 		FROM students s LEFT JOIN telegram_links l ON l.student_id = s.id WHERE `+where+` ORDER BY s.grp, s.name`, args...)
 	if err != nil {
 		return nil, err
@@ -402,7 +402,7 @@ func (s *Server) studentRows(ctx context.Context, where string, args ...any) ([]
 		var sr studentRow
 		var tg sql.NullInt64
 		var linked int64
-		if err := rows.Scan(&sr.ID, &sr.Name, &sr.Group, &sr.Archived, &tg, &sr.TGName, &sr.TGUsername, &linked); err != nil {
+		if err := rows.Scan(&sr.ID, &sr.Name, &sr.Group, &sr.Archived, &sr.Login, &tg, &sr.TGName, &sr.TGUsername, &linked); err != nil {
 			return nil, err
 		}
 		if tg.Valid {
@@ -543,6 +543,15 @@ func (s *Server) handleEditStudent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		http.NotFound(w, r)
 		return
+	}
+	// The login first: if it is refused, nothing has changed. The old UI's
+	// form has no login field: then the login stays as it is.
+	r.ParseForm()
+	if _, ok := r.PostForm["login"]; ok {
+		if err := core.SetLogin(r.Context(), s.DB, s.Now(), id, r.PostFormValue("login"), staffFrom(r).Username); err != nil {
+			back(w, r, studentURL(id), s.coreError(err), true)
+			return
+		}
 	}
 	err := core.UpdateStudent(r.Context(), s.DB, s.Now(), id, r.PostFormValue("name"), r.PostFormValue("group"), staffFrom(r).Username)
 	if err != nil {

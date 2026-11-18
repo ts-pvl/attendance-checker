@@ -32,6 +32,12 @@ var studentsPerOptions = []int{10, 30, 50, 100}
 var studentSorts = map[string]func(a, b *studentRow) int{
 	"name":  func(a, b *studentRow) int { return compareNames(a.Name, b.Name) },
 	"group": func(a, b *studentRow) int { return compareNames(a.Group, b.Group) },
+	"login": func(a, b *studentRow) int { // students without a login last
+		if (a.Login == "") != (b.Login == "") {
+			return cmp.Compare(boolInt(a.Login == ""), boolInt(b.Login == ""))
+		}
+		return cmp.Compare(strings.ToLower(a.Login), strings.ToLower(b.Login))
+	},
 	"status": func(a, b *studentRow) int { // linked, then code sent, then code expired, then not linked
 		return cmp.Compare(linkRank(a), linkRank(b))
 	},
@@ -139,7 +145,7 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 		d.Rows = append(d.Rows, *sr)
 	}
 	d.PerOpts = perChoices(per, studentsPerOptions, s.t("dash.per_all"))
-	for _, h := range []struct{ key, label string }{{"name", "c.name"}, {"group", "c.group"}, {"status", "students.status"}} {
+	for _, h := range []struct{ key, label string }{{"name", "c.name"}, {"group", "c.group"}, {"login", "plat.col_login"}, {"status", "students.status"}} {
 		head := tableHead{Key: h.key, Label: s.t(h.label), URL: link(h.key, "asc", 1)}
 		if d.Sort == h.key {
 			head.Sort, head.URL = "ascending", link(h.key, "desc", 1)
@@ -158,6 +164,7 @@ type nStudentData struct {
 	Points      []core.PointsEntry
 	PointsTotal int
 	MaxPoints   int
+	Platform    *platformUser // the platform user with the student's login
 }
 
 func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +177,10 @@ func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
 	default:
 		nd := nStudentData{studentData: d, Return: r.URL.RequestURI(), MaxPoints: core.MaxPoints}
 		if nd.Points, nd.PointsTotal, err = core.StudentPoints(r.Context(), s.DB, d.Student.ID); err != nil {
+			s.serverError(w, err)
+			return
+		}
+		if nd.Platform, err = s.studentPlatform(r.Context(), d.Student.Login); err != nil {
 			s.serverError(w, err)
 			return
 		}
