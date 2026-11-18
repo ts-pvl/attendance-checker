@@ -321,7 +321,7 @@ func TestSyncer(t *testing.T) {
 // bkim (no names) and dlee (Дана Ли):
 //   - "Петров Иван" and "Петров Иван Сергеевич" both match jdoe: ambiguous, neither is linked;
 //   - "Smith Anna Maria" matches asmith only: linked;
-//   - "Ким Борис": bkim has no names, so nothing;
+//   - "Ким Борис": bkim has no names and ekim only a last name, so nothing;
 //   - "Ли Дана" matches dlee, but dlee is already the login of another student: nothing;
 //   - "Anna Smith" (archived) is not considered, so asmith stays unambiguous.
 func TestLinkByName(t *testing.T) {
@@ -333,6 +333,7 @@ func TestLinkByName(t *testing.T) {
 		{ID: 2, Login: "asmith", FirstName: "Anna", LastName: "Smith"},
 		{ID: 3, Login: "bkim"},
 		{ID: 4, Login: "dlee", FirstName: "Дана", LastName: "Ли"},
+		{ID: 5, Login: "ekim", LastName: "Ким"}, // a last name alone is not enough
 	}); err != nil {
 		t.Fatal(err)
 	}
