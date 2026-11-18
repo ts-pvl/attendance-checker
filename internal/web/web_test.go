@@ -33,6 +33,9 @@ const (
 	outsider = "203.0.113.7"
 )
 
+// testLogOut: set to os.Stderr to see server errors while debugging.
+var testLogOut io.Writer = io.Discard
+
 type testServer struct {
 	t   *testing.T
 	s   *Server
@@ -68,7 +71,7 @@ func newTestServer(t *testing.T) *testServer {
 		Cfg: cfg, DB: db, Engine: engine, Hosts: hosts, Board: board,
 		Checkin: &core.Checkin{Engine: engine, Signer: signer, Board: board, Hosts: hosts, TTL: cfg.QRTokenTTL},
 		Calc:    hours.Calc{Loc: cfg.Timezone}, HostKey: hostKey,
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return ts.now },
+		Log: slog.New(slog.NewTextHandler(testLogOut, nil)), Now: func() time.Time { return ts.now },
 	}
 	ts.h, err = ts.s.Handler()
 	if err != nil {
@@ -563,7 +566,7 @@ func TestNewUIPages(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	core.AddStudent(ctx, ts.s.DB, ts.now, "Alice", "A", "test")
-	pages := []string{"/admin/new/today", "/admin/new/platform", "/admin/new/students", "/admin/new/students/1", "/admin/new/students/slips", "/admin/new/anomalies", "/admin/new/journal"}
+	pages := []string{"/admin/new/today", "/admin/new/help", "/admin/new/platform", "/admin/new/students", "/admin/new/students/1", "/admin/new/students/slips", "/admin/new/anomalies", "/admin/new/journal"}
 	for _, p := range pages {
 		if w := ts.do(req{method: "GET", path: p, ip: staffIP}); w.Code != http.StatusSeeOther {
 			t.Errorf("%s without login: %d", p, w.Code)

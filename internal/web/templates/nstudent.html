@@ -58,6 +58,12 @@
   {{else}}<p class="muted">{{if $st.Login}}{{t "plat.login_not_found" $st.Login}}{{else}}{{t "plat.no_student_login"}}{{end}}</p>{{end}}
 </section>
 
+<section class="card" id="help">
+  <div class="c-head"><h2>{{t "help.on_student"}}</h2>{{if $.D.HelpTotal}}<span>{{t "help.student_total" $.D.HelpTotal}}</span>{{end}}</div>
+  {{if $.D.HelpWeeks}}<p class="days">{{range $.D.HelpWeeks}}<span><small><a href="/admin/new/help?week={{.Week}}">{{t "help.week_label" .Week}}</a></small> {{.N}}</span>{{end}}</p>
+  {{else}}<p class="muted">{{if $st.Login}}{{t "help.student_none"}}{{else}}{{t "plat.no_student_login"}}{{end}}</p>{{end}}
+</section>
+
 <section class="card" id="points">
   <div class="c-head"><h2>{{t "points.title"}}</h2><span>{{t "points.total" $.D.PointsTotal}}</span></div>
   {{if $admin}}{{if not $st.Archived}}

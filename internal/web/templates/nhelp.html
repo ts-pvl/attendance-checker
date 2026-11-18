@@ -1,0 +1,105 @@
+{{define "content"}}
+{{$admin := false}}{{with $.Staff}}{{$admin = .IsAdmin}}{{end}}
+{{with .D}}
+<h1>{{t "help.title"}}</h1>
+<p class="sub">{{t "help.intro"}}</p>
+
+{{if $admin}}
+<section class="card">
+  <h2>{{t "help.import"}}</h2>
+  <form method="post" action="/admin/help/import" enctype="multipart/form-data" class="filters">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{.Self}}">
+    <label class="field">{{t "help.file"}} <input type="file" name="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></label>
+    <label class="field">{{t "help.week_of"}} <input type="date" name="week" value="{{.DefaultWeek}}" required></label>
+    <button class="btn primary">{{t "help.import_btn"}}</button>
+  </form>
+  <p class="muted hint">{{t "help.import_hint"}}</p>
+</section>
+{{end}}
+
+{{if not .Weeks}}
+<section class="card"><p class="muted">{{t "help.none"}}</p></section>
+{{else}}
+<section class="card">
+  <div class="c-head">
+    <h2>{{t "help.counts"}}</h2>
+    <form class="tools" method="get" action="/admin/new/help" data-autosubmit>
+      <select name="week" aria-label="{{t "help.week"}}">
+        {{range .Weeks}}<option value="{{.Week}}" {{if eq .Week $.D.Week}}selected{{end}}>{{t "help.week_label" .Week}}</option>{{end}}
+        <option value="all" {{if eq .Week "all"}}selected{{end}}>{{t "help.all_weeks"}}</option>
+      </select>
+      <select name="group" aria-label="{{t "c.group"}}">
+        <option value="">{{t "dash.all_groups"}}</option>
+        {{range .Groups}}<option {{if eq . $.D.Group}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+      <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
+      {{template "per-select" (perSelect "per" .PerOpts)}}
+      <noscript><button class="btn">{{t "dash.show"}}</button></noscript>
+    </form>
+  </div>
+  {{with .Current}}
+  <p class="muted hint">{{t "help.week_stats" .Answers .Counted $.D.Stats.Counted $.D.Stats.Unresolved}} · {{.File}} · {{.Actor}}, {{dt .Created}}</p>
+  {{end}}
+  {{if .Rows}}
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr>{{range .Heads}}<th{{if .Num}} class="num"{{end}}{{if .Sort}} aria-sort="{{.Sort}}"{{end}}>{{if .URL}}<a href="{{.URL}}">{{.Label}}</a>{{else}}<span class="th">{{.Label}}</span>{{end}}</th>{{end}}</tr></thead>
+    <tbody>
+    {{range .Rows}}
+    <tr>
+      <td class="mono">{{.Login}}</td>
+      <td>{{if .StudentID}}<a class="name" href="/admin/new/students/{{.StudentID}}">{{.Student}}</a>{{else}}{{.PlatformName}} <span class="pill">{{t "help.not_student"}}</span>{{end}}</td>
+      <td class="muted">{{.Group}}</td>
+      {{if $.D.Current}}<td class="num">{{.Week}}</td>{{end}}
+      <td class="num">{{.Total}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{template "pager" .Pager}}
+  {{else}}<p class="muted">{{t "help.nobody_named"}}</p>{{end}}
+</section>
+
+{{if .Current}}
+<section class="card" id="review">
+  <h2>{{t "help.review"}} <span class="count">{{len .Review}}</span></h2>
+  <p class="muted hint">{{t "help.review_hint"}}</p>
+  {{if .Review}}
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr><th><span class="th">{{t "help.typed"}}</span></th><th class="num"><span class="th">{{t "help.times"}}</span></th><th><span class="th">{{t "help.result"}}</span></th><th><span class="th">{{t "help.by"}}</span></th>{{if $admin}}<th><span class="th">{{t "help.fix"}}</span></th>{{end}}</tr></thead>
+    <tbody>
+    {{range .Review}}
+    <tr>
+      <td class="mono">{{.Typed}}</td>
+      <td class="num">{{.Times}}</td>
+      <td>{{if .Login}}<span class="pill ok">{{t (printf "help.how_%s" .How)}}</span> <span class="mono">{{.Login}}</span>
+        {{else}}<span class="pill warn">{{t "help.unresolved"}}</span>{{if .Suggest}} {{t "help.maybe"}} <span class="mono">{{.Suggest}}</span>{{end}}{{end}}</td>
+      <td class="wrap muted">{{.Respondents}}</td>
+      {{if $admin}}<td class="actions">
+        <form method="post" action="/admin/help/alias" class="inline">
+          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$.D.Self}}">
+          <input type="hidden" name="typed" value="{{.Typed}}">
+          <input name="login" list="logins" value="{{if .Login}}{{.Login}}{{else}}{{.Suggest}}{{end}}" placeholder="{{t "plat.col_login"}}" aria-label="{{t "plat.col_login"}}" class="login-input">
+          <button class="btn small">{{t "c.save"}}</button>
+        </form>
+      </td>{{end}}
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted">{{t "help.review_none"}}</p>{{end}}
+  {{if $admin}}
+  <datalist id="logins">{{range .Logins}}<option value="{{.}}">{{end}}</datalist>
+  <form method="post" action="/admin/help/delete" class="row" data-confirm="{{t "help.delete_confirm" .Current.Week.Week}}">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="week" value="{{.Current.Week.Week}}">
+    <button class="btn danger small">{{t "help.delete" .Current.Week.Week}}</button>
+  </form>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{end}}
+{{end}}

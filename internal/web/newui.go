@@ -165,6 +165,13 @@ type nStudentData struct {
 	PointsTotal int
 	MaxPoints   int
 	Platform    *platformUser // the platform user with the student's login
+	HelpTotal   int
+	HelpWeeks   []helpWeek // weeks the student was named, newest first
+}
+
+type helpWeek struct {
+	Week string
+	N    int
 }
 
 func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
@@ -183,6 +190,21 @@ func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
 		if nd.Platform, err = s.studentPlatform(r.Context(), d.Student.Login); err != nil {
 			s.serverError(w, err)
 			return
+		}
+		if d.Student.Login != "" {
+			_, tallies, err := s.helpCounts(r.Context())
+			if err != nil {
+				s.serverError(w, err)
+				return
+			}
+			for _, t := range tallies {
+				for login, n := range t.Counts {
+					if strings.EqualFold(login, d.Student.Login) {
+						nd.HelpTotal += n
+						nd.HelpWeeks = append(nd.HelpWeeks, helpWeek{t.Week.Week, n})
+					}
+				}
+			}
 		}
 		s.render(w, r, http.StatusOK, "nstudent", nd)
 	}
