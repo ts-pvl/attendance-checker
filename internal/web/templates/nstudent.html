@@ -46,6 +46,39 @@
   {{end}}
 </section>
 
+<section class="card" id="points">
+  <div class="c-head"><h2>{{t "points.title"}}</h2><span>{{t "points.total" $.D.PointsTotal}}</span></div>
+  {{if $admin}}{{if not $st.Archived}}
+  <form method="post" action="/admin/students/{{$st.ID}}/points" class="filters">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
+    <label class="field">{{t "points.points"}} <input type="number" name="points" min="1" max="{{$.D.MaxPoints}}" step="1" required class="num-input"></label>
+    <label class="field grow">{{t "c.reason"}} <input name="reason" maxlength="300" placeholder="{{t "points.reason_ph"}}" required></label>
+    <button class="btn primary">{{t "points.add"}}</button>
+  </form>
+  {{end}}{{end}}
+  {{if $.D.Points}}
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr><th><span class="th">{{t "c.when"}}</span></th><th class="num"><span class="th">{{t "points.points"}}</span></th><th><span class="th">{{t "c.reason"}}</span></th><th><span class="th">{{t "c.who"}}</span></th>{{if $admin}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range $.D.Points}}
+    <tr class="{{if not .Cancelled.IsZero}}deleted{{end}}">
+      <td>{{dt .Created}}</td><td class="num">+{{.Points}}</td>
+      <td class="wrap">{{.Reason}}{{if .Batch}} <span class="pill">{{t "points.everyone"}}</span>{{end}}</td>
+      <td class="muted">{{.Actor}}{{if not .Cancelled.IsZero}}<br><small>{{t "points.cancelled_by" .CancelledBy (dt .Cancelled)}}</small>{{end}}</td>
+      {{if $admin}}<td class="actions">{{if .Cancelled.IsZero}}
+        <form method="post" action="/admin/points/{{.ID}}/cancel" data-confirm="{{t "points.cancel_confirm"}}">
+          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
+          <button class="btn small">{{t "points.cancel"}}</button>
+        </form>{{end}}</td>{{end}}
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted">{{t "points.none"}}</p>{{end}}
+</section>
+
 <section class="card">
 <div class="c-head"><h2>{{t "student.visits"}}</h2>
   <div class="period">

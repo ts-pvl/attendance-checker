@@ -154,7 +154,10 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 
 type nStudentData struct {
 	*studentData
-	Return string
+	Return      string
+	Points      []core.PointsEntry
+	PointsTotal int
+	MaxPoints   int
 }
 
 func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +168,12 @@ func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.serverError(w, err)
 	default:
-		s.render(w, r, http.StatusOK, "nstudent", nStudentData{d, r.URL.RequestURI()})
+		nd := nStudentData{studentData: d, Return: r.URL.RequestURI(), MaxPoints: core.MaxPoints}
+		if nd.Points, nd.PointsTotal, err = core.StudentPoints(r.Context(), s.DB, d.Student.ID); err != nil {
+			s.serverError(w, err)
+			return
+		}
+		s.render(w, r, http.StatusOK, "nstudent", nd)
 	}
 }
 
