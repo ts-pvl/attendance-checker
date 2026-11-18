@@ -103,6 +103,7 @@ svg .bar.light { fill: var(--accent-2); }
 svg .bar:hover { opacity: .8; }
 svg .area { fill: var(--area); }
 svg .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+svg .pt { fill: var(--panel); stroke: var(--accent); stroke-width: 2; pointer-events: none; }
 svg .hit { fill: transparent; }
 svg .hit:hover { fill: var(--accent); }
 

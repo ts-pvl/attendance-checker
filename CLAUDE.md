@@ -7,7 +7,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 
 * Go, standard library first: `net/http`, `html/template`, `embed`, `encoding/csv`.
 * SQLite via `modernc.org/sqlite` (pure Go, no cgo). WAL, busy timeout, short write transactions.
-* `golang.org/x/crypto/bcrypt` for staff passwords.
+* `golang.org/x/crypto/bcrypt` for staff passwords; `golang.org/x/sys/unix` only to read a password without echo (`cmd/attendance`).
 * Vendored front-end files in `internal/web/static`: htmx 2.0.11, qrcode-generator 2.0.4. No Node toolchain.
 * **No new dependency without approval.** Pin versions in `go.mod`.
 
@@ -21,7 +21,8 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * Every user-visible string lives in `internal/i18n` in both English and Russian.
 * Never log or paste the bot token, host key, token secret or real student data. Use a separate test bot and fake data.
 * **Strict CSP:** no inline `<script>`, `style=` or `<style>` in templates. Charts and bars are server-rendered SVG with attributes; behaviour goes in `internal/web/static/*.js`.
-* **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
+* **Browser storage** is for small conveniences only, never for data: `localStorage` holds the light/dark theme, `sessionStorage` the dashboard dates for one browser tab (cleared on reload). Shared settings, such as the Today grid layout, go in the `settings` table and the journal.
+* **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`, with the tabs Dashboard, Today, Students, Anomalies and Journal). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
 * `admin_ansible/` is a copy of the school's real Ansible inventory, for reference only. Never commit it.
 * The lab PCs boot with overlayroot. The agent role writes to the lower disk by remounting it; do not copy files through `overlayroot-chroot` (see `docs/decisions.md`).
 * User-facing docs come in English, Russian and Kazakh: `README.md`, `README.ru.md`, `README.kk.md`, and the staff runbook and student instructions in `docs/` (`.md`/`.en.md`, `.ru.md`, `.kk.md`). Update all three together and keep them simple: the readers run a school, not a codebase. `docs/development.md` and `docs/decisions.md` are English only.
@@ -35,7 +36,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 
 ## Commands
 
-`make test`, `make race`, `make check` (vet, staticcheck, govulncheck, gosec, shellcheck), `make pi`.
+`make test`, `make race`, `make check` (vet, staticcheck, govulncheck, gosec, shellcheck, race), `make pi`.
 
 `make dev` runs everything locally in `.dev/` (it adapts to WSL and seeds invented data with `cmd/devseed`, which refuses any database outside `.dev/`).
 

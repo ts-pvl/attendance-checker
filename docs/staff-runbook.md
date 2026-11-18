@@ -12,6 +12,8 @@ the next login opens the one used last.
   current week by default; the matrix has its own period, the current month by
   default). Its tabs are Today, Students, Anomalies and Journal (admins).
   Students, Anomalies and Journal have the same actions as the old pages.
+  The dashboard keeps the dates you chose while you visit the other tabs, until
+  you reload the page or close the browser tab.
 * **Admin** (old): Today, Hours, Students, Anomalies and Audit log, as below.
 
 ## Morning check (30 seconds)

@@ -18,7 +18,7 @@
 <header class="dh noprint">
   <div class="dh-brand"><span class="dot" aria-hidden="true"></span>{{brand}}</div>
   <nav class="tabs" aria-label="{{t "ui.sections"}}">
-    <a href="/admin/dashboard" {{if eq $p "dash"}}aria-current="page"{{end}}>{{t "ui.dashboard"}}</a>
+    <a href="/admin/dashboard" data-dash-tab {{if eq $p "dash"}}aria-current="page"{{end}}>{{t "ui.dashboard"}}</a>
     <a href="/admin/new/today" {{if eq $p "ntoday"}}aria-current="page"{{end}}>{{t "nav.today"}}</a>
     <a href="/admin/new/students" {{if or (eq $p "nstudents") (eq $p "nstudent") (eq $p "nslips")}}aria-current="page"{{end}}>{{t "nav.students"}}</a>
     <a href="/admin/new/anomalies" {{if eq $p "nanomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>

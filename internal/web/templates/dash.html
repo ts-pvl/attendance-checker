@@ -132,6 +132,7 @@
   {{end}}
   {{range .Bars}}<rect class="bar{{if .Light}} light{{end}}" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" .Y}}" width="{{printf "%.1f" .W}}" height="{{printf "%.1f" .H}}" rx="2"><title>{{.Title}}</title></rect>{{end}}
   {{if .Area}}<path class="area" d="{{.Area}}"/><path class="line" d="{{.Line}}"/>{{end}}
+  {{range .Dots}}<circle class="pt" cx="{{printf "%.1f" .X}}" cy="{{printf "%.1f" .Y}}" r="3"/>{{end}}
   {{range .Dots}}<circle class="hit" cx="{{printf "%.1f" .X}}" cy="{{printf "%.1f" .Y}}" r="7"><title>{{.Title}}</title></circle>{{end}}
   {{range .Labels}}<text class="axis" x="{{printf "%.1f" .X}}" y="{{printf "%.1f" (addf $.Y1 16)}}" text-anchor="middle">{{.Text}}</text>{{end}}
 </svg>

@@ -423,8 +423,8 @@ func barChart(lang string, w, h float64, vals []float64, labels []string, light 
 	return c
 }
 
-// lineChart draws a smooth line (Catmull-Rom as cubic Béziers) with the area
-// under it filled; the curve is kept inside the plot.
+// lineChart joins the points with straight lines and fills the area under
+// them. Every point is drawn as a small circle (Dots).
 func lineChart(lang string, w, h float64, vals []float64, labels []string, titles []string) chart {
 	c, top := newChart(lang, w, h, vals, true)
 	n := len(vals)
@@ -438,14 +438,10 @@ func lineChart(lang string, w, h float64, vals []float64, labels []string, title
 		pts[i] = pt{c.X0 + slot*(float64(i)+0.5), c.y(v, top)}
 		c.Dots = append(c.Dots, dot{X: pts[i].x, Y: pts[i].y, Title: titles[i]})
 	}
-	clampY := func(y float64) float64 { return math.Max(c.Y0, math.Min(c.Y1, y)) }
 	var b strings.Builder
 	fmt.Fprintf(&b, "M%.1f,%.1f", pts[0].x, pts[0].y)
-	for i := 0; i < n-1; i++ {
-		p0, p1, p2, p3 := pts[max(i-1, 0)], pts[i], pts[i+1], pts[min(i+2, n-1)]
-		c1 := pt{p1.x + (p2.x-p0.x)/6, clampY(p1.y + (p2.y-p0.y)/6)}
-		c2 := pt{p2.x - (p3.x-p1.x)/6, clampY(p2.y - (p3.y-p1.y)/6)}
-		fmt.Fprintf(&b, " C%.1f,%.1f %.1f,%.1f %.1f,%.1f", c1.x, c1.y, c2.x, c2.y, p2.x, p2.y)
+	for _, p := range pts[1:] {
+		fmt.Fprintf(&b, " L%.1f,%.1f", p.x, p.y)
 	}
 	c.Line = b.String()
 	c.Area = fmt.Sprintf("%s L%.1f,%.1f L%.1f,%.1f Z", c.Line, pts[n-1].x, c.Y1, pts[0].x, c.Y1)

@@ -995,3 +995,37 @@ func TestAnomaliesDefaultToThisWeek(t *testing.T) {
 		t.Errorf("default %s–%s, want this week 2026-03-09–2026-03-15", d.From, d.To)
 	}
 }
+
+// The students-per-day chart joins its points with straight lines and draws
+// every point. By hand, for 0, 2 and 4 students on a 380 x 270 chart: the
+// plot runs from x 38 to 372 and y 244 (zero) to 12; the scale tops out at 4.
+// Three slots of 111.33 put the points at x 93.7, 205.0 and 316.3, and the
+// values at y 244, 128 and 12.
+func TestLineChartStraight(t *testing.T) {
+	c := lineChart("en", 380, 270, []float64{0, 2, 4}, []string{"a", "b", "c"}, []string{"0", "2", "4"})
+	if want := "M93.7,244.0 L205.0,128.0 L316.3,12.0"; c.Line != want {
+		t.Errorf("line %q, want %q", c.Line, want)
+	}
+	if want := "M93.7,244.0 L205.0,128.0 L316.3,12.0 L316.3,244.0 L93.7,244.0 Z"; c.Area != want {
+		t.Errorf("area %q, want %q", c.Area, want)
+	}
+	if len(c.Dots) != 3 || c.Dots[1].X < 204.9 || c.Dots[1].X > 205.1 || c.Dots[1].Y != 128 || c.Dots[2].Title != "4" {
+		t.Errorf("dots %+v", c.Dots)
+	}
+	// One point: a line of one move, and still one visible dot.
+	if c := lineChart("en", 380, 270, []float64{3}, []string{"a"}, []string{"3"}); c.Line != "M205.0,12.0" || len(c.Dots) != 1 {
+		t.Errorf("one point: %q, %d dots", c.Line, len(c.Dots))
+	}
+
+	// On the page, each point is a visible circle as well as a hover target.
+	ts := newTestServer(t)
+	core.AddStudent(context.Background(), ts.s.DB, ts.now, "Alice", "A", "test")
+	admin, _ := ts.login("boss")
+	body := ts.do(req{method: "GET", path: "/admin/dashboard?from=2026-03-02&to=2026-03-08", ip: staffIP, cookie: admin}).Body.String()
+	if pts, hits := strings.Count(body, `<circle class="pt" `), strings.Count(body, `<circle class="hit" `); pts != 7 || hits != 7 {
+		t.Errorf("a week: %d visible points and %d hover targets, want 7 and 7", pts, hits)
+	}
+	if strings.Contains(body, `<path class="line" d="M`) && regexp.MustCompile(`<path class="line" d="[^"]*C`).MatchString(body) {
+		t.Error("the line still has curves")
+	}
+}
