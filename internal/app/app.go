@@ -20,6 +20,7 @@ import (
 	"attendance/internal/config"
 	"attendance/internal/core"
 	"attendance/internal/hours"
+	"attendance/internal/platform"
 	"attendance/internal/store"
 	"attendance/internal/token"
 	"attendance/internal/web"
@@ -30,14 +31,15 @@ type Options struct {
 }
 
 type App struct {
-	Cfg    *config.Config
-	DB     *store.DB
-	Engine *core.Engine
-	Hosts  *core.Hosts
-	Bot    *bot.Bot
-	Web    *web.Server
-	Log    *slog.Logger
-	Now    func() time.Time
+	Cfg      *config.Config
+	DB       *store.DB
+	Engine   *core.Engine
+	Hosts    *core.Hosts
+	Bot      *bot.Bot
+	Web      *web.Server
+	Platform *platform.Syncer
+	Log      *slog.Logger
+	Now      func() time.Time
 }
 
 // LoadTokenSecret reads the QR token HMAC key, creating it on first start.
@@ -114,9 +116,10 @@ func New(ctx context.Context, cfg *config.Config, opts Options, log *slog.Logger
 			go a.checkBotIdentity(ctx, api)
 		}
 	}
+	a.Platform = &platform.Syncer{DB: db, Base: cfg.PlatformURL, TokenFile: cfg.PlatformTokenPath(), Log: log.With("part", "platform")}
 	a.Web = &web.Server{
 		Cfg: cfg, DB: db, Engine: engine, Checkin: checkin, Hosts: hosts, Board: board, Bot: a.Bot,
-		Calc: calc, HostKey: hostKey, Log: log.With("part", "web"), Now: time.Now,
+		Calc: calc, HostKey: hostKey, Log: log.With("part", "web"), Now: time.Now, Platform: a.Platform,
 	}
 	return a, nil
 }
@@ -223,6 +226,13 @@ func (a *App) jobs(ctx context.Context) {
 				a.Log.Info("hosts file reloaded", "hosts", len(a.Hosts.All()))
 			}
 			a.daily(ctx)
+			if a.Platform.Due(ctx, now, a.Cfg.PlatformSyncEvery) {
+				go func() { // a slow platform must not hold up the other jobs
+					sctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+					defer cancel()
+					a.Platform.Sync(sctx, a.Now(), "") // logs its own outcome
+				}()
+			}
 		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"attendance/internal/core"
 	"attendance/internal/dash"
 	"attendance/internal/hours"
+	"attendance/internal/platform"
 	"attendance/internal/store"
 )
 
@@ -32,6 +33,12 @@ var studentsPerOptions = []int{10, 30, 50, 100}
 var studentSorts = map[string]func(a, b *studentRow) int{
 	"name":  func(a, b *studentRow) int { return compareNames(a.Name, b.Name) },
 	"group": func(a, b *studentRow) int { return compareNames(a.Group, b.Group) },
+	"login": func(a, b *studentRow) int { // students without a login last
+		if (a.Login == "") != (b.Login == "") {
+			return cmp.Compare(boolInt(a.Login == ""), boolInt(b.Login == ""))
+		}
+		return cmp.Compare(strings.ToLower(a.Login), strings.ToLower(b.Login))
+	},
 	"status": func(a, b *studentRow) int { // linked, then code sent, then code expired, then not linked
 		return cmp.Compare(linkRank(a), linkRank(b))
 	},
@@ -139,7 +146,7 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 		d.Rows = append(d.Rows, *sr)
 	}
 	d.PerOpts = perChoices(per, studentsPerOptions, s.t("dash.per_all"))
-	for _, h := range []struct{ key, label string }{{"name", "c.name"}, {"group", "c.group"}, {"status", "students.status"}} {
+	for _, h := range []struct{ key, label string }{{"name", "c.name"}, {"group", "c.group"}, {"login", "plat.col_login"}, {"status", "students.status"}} {
 		head := tableHead{Key: h.key, Label: s.t(h.label), URL: link(h.key, "asc", 1)}
 		if d.Sort == h.key {
 			head.Sort, head.URL = "ascending", link(h.key, "desc", 1)
@@ -154,7 +161,21 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 
 type nStudentData struct {
 	*studentData
-	Return string
+	Return      string
+	Points      []core.PointsEntry
+	PointsTotal int
+	MaxPoints   int
+	Platform    *platformUser // the platform user with the student's login
+	PlatEvents  []platformUserEvent
+	PlatReady   bool      // a sync can run (address and token)
+	PlatSynced  time.Time // the last good sync; zero: never
+	HelpTotal   int
+	HelpWeeks   []helpWeek // weeks the student was named, newest first
+}
+
+type helpWeek struct {
+	Week string
+	N    int
 }
 
 func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +186,41 @@ func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		s.serverError(w, err)
 	default:
-		s.render(w, r, http.StatusOK, "nstudent", nStudentData{d, r.URL.RequestURI()})
+		nd := nStudentData{studentData: d, Return: r.URL.RequestURI(), MaxPoints: core.MaxPoints}
+		if nd.Points, nd.PointsTotal, err = core.StudentPoints(r.Context(), s.DB, d.Student.ID); err != nil {
+			s.serverError(w, err)
+			return
+		}
+		if nd.Platform, err = s.studentPlatform(r.Context(), d.Student.Login); err != nil {
+			s.serverError(w, err)
+			return
+		}
+		if nd.Platform != nil {
+			if nd.PlatEvents, err = s.userEvents(r.Context(), nd.Platform); err != nil {
+				s.serverError(w, err)
+				return
+			}
+		}
+		nd.PlatReady = s.syncer().Ready()
+		if st, err := platform.LoadStatus(r.Context(), s.DB); err == nil {
+			nd.PlatSynced = st.LastSync
+		}
+		if d.Student.Login != "" {
+			_, tallies, err := s.helpCounts(r.Context())
+			if err != nil {
+				s.serverError(w, err)
+				return
+			}
+			for _, t := range tallies {
+				for login, n := range t.Counts {
+					if strings.EqualFold(login, d.Student.Login) {
+						nd.HelpTotal += n
+						nd.HelpWeeks = append(nd.HelpWeeks, helpWeek{t.Week.Week, n})
+					}
+				}
+			}
+		}
+		s.render(w, r, http.StatusOK, "nstudent", nd)
 	}
 }
 

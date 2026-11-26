@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -61,6 +62,40 @@ type Config struct {
 	AnomalyLowActivityGap time.Duration // median gap between active pings at or above this: low activity
 	AnomalyLongVisit      time.Duration // visits longer than this
 	AlertAfter            time.Duration // /healthz turns red after this long without heartbeats or bot polls
+
+	// Learning platform (internal/platform). The address is fixed here (an
+	// empty one turns the integration off); the events are set in the admin
+	// UI; the access token is kept in PlatformTokenFile, which the service
+	// writes itself (default: next to the database).
+	PlatformURL       string // https://host, no path
+	PlatformTokenFile string
+	PlatformSyncEvery time.Duration // 0: sync only on request
+}
+
+// DefaultPlatformURL is the school's learning platform: staff never type it.
+const DefaultPlatformURL = "https://01.tomorrow-school.ai"
+
+// CleanPlatformURL keeps the scheme and host of an https address, in lower
+// case; "" stays "" (no platform).
+func CleanPlatformURL(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
+		(u.Path != "" && u.Path != "/") || strings.ContainsAny(u.Host, " \\") {
+		return "", fmt.Errorf("platform_url must be an https address with no path, like https://01.example.org")
+	}
+	return "https://" + strings.ToLower(u.Host), nil
+}
+
+// PlatformTokenPath is where the platform access token is kept.
+func (c *Config) PlatformTokenPath() string {
+	if c.PlatformTokenFile != "" {
+		return c.PlatformTokenFile
+	}
+	return filepath.Join(filepath.Dir(c.DBPath), "platform_token")
 }
 
 // Clock is a time of day.
@@ -107,6 +142,8 @@ func Default() *Config {
 		AnomalyLowActivityGap:  10 * time.Minute,
 		AnomalyLongVisit:       6 * time.Hour,
 		AlertAfter:             15 * time.Minute,
+		PlatformURL:            DefaultPlatformURL,
+		PlatformSyncEvery:      time.Hour,
 	}
 }
 
@@ -238,6 +275,12 @@ func (c *Config) set(k, v string) error {
 		// Still accepted, so that an existing attendance.conf keeps working.
 	case "alert_after":
 		dur(&c.AlertAfter)
+	case "platform_url":
+		c.PlatformURL, err = CleanPlatformURL(v)
+	case "platform_token_file":
+		c.PlatformTokenFile = v
+	case "platform_sync_every":
+		dur(&c.PlatformSyncEvery)
 	default:
 		return fmt.Errorf("unknown key %q", k)
 	}
@@ -282,6 +325,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("heartbeat_timeout must be at least 1m")
 	case len(c.AdminNetworks) == 0:
 		return fmt.Errorf("admin_networks must not be empty")
+	case c.PlatformSyncEvery != 0 && c.PlatformSyncEvery < 10*time.Minute:
+		return fmt.Errorf("platform_sync_every must be 0 (off) or at least 10m")
 	}
 	return nil
 }

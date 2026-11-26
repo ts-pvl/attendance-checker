@@ -10,7 +10,8 @@ the next login opens the one used last.
 * **Dashboard** (new): hours, students present, load by hour and weekday, the
   attendance matrix and a table of all students for a chosen period (the
   current week by default; the matrix has its own period, the current month by
-  default). Its tabs are Today, Students, Anomalies and Journal (admins).
+  default). Its tabs are Today, Students, Anomalies, Peer help, Platform and
+  Journal (admins).
   Students, Anomalies and Journal have the same actions as the old pages.
   The dashboard keeps the dates you chose while you visit the other tabs, until
   you reload the page or close the browser tab.
@@ -55,8 +56,9 @@ name order). The layout is shared by all staff, and changes are in the Journal.
 ## Common tasks
 
 **Import or update the student list.** Students → *Import or update from CSV*.
-Columns: `name`, `group`, optional `id` (Russian headers `имя`/`ФИО`, `группа` work too).
-Comma or semicolon separated. Existing students are matched by `id`, otherwise by exact name.
+Columns: `name`, `group`, optional `id` and `login` (the platform login; Russian headers
+`имя`/`ФИО`, `группа`, `логин` work too). Comma or semicolon separated. Existing students
+are matched by `id`, then by `login`, otherwise by exact name.
 Leavers: open the student and press *Archive* (history stays).
 
 **Enrollment day.** Students → *Create links for everyone not yet linked* → print the slips page.
@@ -96,6 +98,45 @@ The Anomalies tab of the new interface adds four lists for the chosen period
 
 The thresholds are settings in `attendance.conf` (`anomaly_low_activity_gap`,
 `anomaly_long_visit`, `anomaly_latency`).
+
+**Points for social activities** (admins). On the *Today* tab of the new
+interface, enter the points and what they are for, then press *Add to everyone
+present*: every student checked in at that moment gets them. To give points to
+one student, use the same fields on the student's page. A mistake is undone
+with *Cancel*: the entry stays in the list, crossed out, and both steps are in
+the Journal.
+
+**Learning platform** (admins, once). The system reads each student's level,
+XP and audit ratio from the school's learning platform, by the student's
+platform login. The platform's address is already in the server's settings.
+
+1. A platform admin logs in to the platform's Git (`https://<platform>/git`),
+   opens *Settings → Applications* and presses *Generate New Token*.
+2. In the new interface open *Platform → Settings*, paste the token and press
+   *Save*.
+3. Give the students their platform logins: in the *Add student* form, on the
+   student's page (*Edit name, group or login*), or with a `login` column in
+   the student list file.
+4. Press *Sync now*. From then on the server syncs every hour by itself.
+
+The *Platform* tab then lists the events your students are in. On the current
+piscine press *Load all participants*: everyone in it is read, so that *Link
+students by name* can give logins to the students who still have none, and
+peer help knows every classmate. *Link students by name* links only students
+whose name matches exactly one person, and every link is in the Journal. A
+student's page shows their level and XP in each event. The token stays on the
+server and is never shown again; to replace it, enter a new one.
+
+**Peer help** (weekly). Download the answers of the "who helped you most"
+form as .xlsx (or .csv) and import them on the *Peer help* tab, choosing the
+week. The tab shows how many times each student was named. Logins with a
+small typo are corrected automatically. Anything uncertain appears under *To
+check* and does not count until you enter the right login there; that login is
+then used for every week. If someone answered twice, only their last answer
+counts, and naming yourself does not count. Before the first import, load all
+participants of the current piscine on the *Platform* tab: otherwise a
+classmate who is not in this system is not recognised, and a login one letter
+away from a student's may be counted for that student.
 
 ## Staff accounts (on the server)
 

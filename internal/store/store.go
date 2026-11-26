@@ -189,6 +189,104 @@ CREATE TABLE audit_log (
 );
 CREATE INDEX audit_log_at ON audit_log(at);
 `,
+	// 2: social points, platform logins and users, peer-help answers.
+	`
+-- Points for social activities. A mistake is cancelled, never deleted.
+-- batch is the id of the first row of one award to everyone present.
+CREATE TABLE points (
+  id           INTEGER PRIMARY KEY,
+  student_id   INTEGER NOT NULL REFERENCES students(id),
+  points       INTEGER NOT NULL,
+  reason       TEXT NOT NULL,
+  batch        INTEGER,
+  actor        TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  cancelled_at INTEGER,
+  cancelled_by TEXT
+);
+CREATE INDEX points_student ON points(student_id);
+CREATE INDEX points_batch ON points(batch);
+
+-- The student's login on the learning platform ('' while unknown).
+ALTER TABLE students ADD COLUMN login TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX students_login ON students(lower(login)) WHERE login <> '';
+
+-- Users of the learning platform as of the last sync (internal/platform).
+CREATE TABLE platform_users (
+  id          INTEGER PRIMARY KEY,
+  login       TEXT NOT NULL,
+  first_name  TEXT NOT NULL DEFAULT '',
+  last_name   TEXT NOT NULL DEFAULT '',
+  email       TEXT NOT NULL DEFAULT '',
+  xp          INTEGER NOT NULL DEFAULT 0,
+  audit_ratio REAL,
+  events      TEXT NOT NULL DEFAULT '',
+  synced_at   INTEGER NOT NULL
+);
+CREATE INDEX platform_users_login ON platform_users(lower(login));
+
+-- Weekly peer-help form answers (internal/help), one import per week.
+CREATE TABLE help_imports (
+  id         INTEGER PRIMARY KEY,
+  week       TEXT NOT NULL UNIQUE,
+  file_name  TEXT NOT NULL,
+  answers    INTEGER NOT NULL,
+  actor      TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+-- peers is a JSON array of the logins as typed, in the form's order.
+CREATE TABLE help_answers (
+  id         INTEGER PRIMARY KEY,
+  import_id  INTEGER NOT NULL REFERENCES help_imports(id) ON DELETE CASCADE,
+  row        INTEGER NOT NULL,
+  respondent TEXT NOT NULL,
+  name       TEXT NOT NULL,
+  peers      TEXT NOT NULL
+);
+CREATE INDEX help_answers_import ON help_answers(import_id);
+-- A typed login that staff resolved by hand: typed is normalised (help.Normalize).
+CREATE TABLE help_aliases (
+  typed      TEXT PRIMARY KEY,
+  login      TEXT NOT NULL,
+  actor      TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`,
+	// 3: the learning platform by event: each user's level and XP in every
+	// event. All three tables are a copy of the platform, replaced by each
+	// sync, so the old platform_users goes without a loss.
+	`
+DROP TABLE platform_users;
+CREATE TABLE platform_users (
+  id          INTEGER PRIMARY KEY,
+  login       TEXT NOT NULL,
+  first_name  TEXT NOT NULL DEFAULT '',
+  last_name   TEXT NOT NULL DEFAULT '',
+  other_name  TEXT NOT NULL DEFAULT '',  -- "First Last" in Latin letters, if different
+  email       TEXT NOT NULL DEFAULT '',
+  audit_ratio REAL,
+  event_id    INTEGER,                   -- the current event (platform.current)
+  level       INTEGER NOT NULL DEFAULT 0, -- in the current event
+  xp          INTEGER NOT NULL DEFAULT 0, -- in the current event
+  synced_at   INTEGER NOT NULL
+);
+CREATE INDEX platform_users_login ON platform_users(lower(login));
+CREATE TABLE platform_events (
+  id        INTEGER PRIMARY KEY,
+  path      TEXT NOT NULL,
+  parent_id INTEGER,
+  start_at  INTEGER,
+  end_at    INTEGER
+);
+CREATE TABLE platform_user_events (
+  user_id  INTEGER NOT NULL,
+  event_id INTEGER NOT NULL,
+  level    INTEGER NOT NULL DEFAULT 0,
+  xp       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, event_id)
+);
+CREATE INDEX platform_user_events_event ON platform_user_events(event_id);
+`,
 }
 
 func (db *DB) migrate(ctx context.Context) error {

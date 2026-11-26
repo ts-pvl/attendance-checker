@@ -16,6 +16,7 @@ import (
 	"attendance/internal/config"
 	"attendance/internal/core"
 	"attendance/internal/hours"
+	"attendance/internal/platform"
 	"attendance/internal/store"
 )
 
@@ -42,6 +43,8 @@ type Server struct {
 	HostKey string
 	Log     *slog.Logger
 	Now     func() time.Time
+	// Platform syncs with the learning platform; nil in tests that do not need it.
+	Platform *platform.Syncer
 
 	pages  map[string]*pageTemplate
 	logins *loginLimiter
@@ -86,6 +89,19 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("GET /admin/dashboard.csv", s.staff(s.handleDashboardCSV))
 	mux.Handle("GET /admin/new/today", s.staff(s.handleNewToday))
 	mux.Handle("POST /admin/new/today/layout", s.admin(s.handleTodayLayout))
+	mux.Handle("GET /admin/new/help", s.staff(s.handleNewHelp))
+	mux.Handle("POST /admin/help/import", s.admin(s.handleHelpImport))
+	mux.Handle("POST /admin/help/alias", s.admin(s.handleHelpAlias))
+	mux.Handle("POST /admin/help/delete", s.admin(s.handleHelpDelete))
+	mux.Handle("GET /admin/new/platform", s.staff(s.handleNewPlatform))
+	mux.Handle("POST /admin/platform/settings", s.admin(s.handlePlatformSettings))
+	mux.Handle("POST /admin/platform/sync", s.admin(s.handlePlatformSync))
+	mux.Handle("POST /admin/platform/link", s.admin(s.handlePlatformLink))
+	mux.Handle("POST /admin/platform/event", s.admin(s.handlePlatformEvent))
+	mux.Handle("POST /admin/points/present", s.admin(s.handlePointsPresent))
+	mux.Handle("POST /admin/points/batch/{id}/cancel", s.admin(s.handlePointsBatchCancel))
+	mux.Handle("POST /admin/points/{id}/cancel", s.admin(s.handlePointsCancel))
+	mux.Handle("POST /admin/students/{id}/points", s.admin(s.handlePointsStudent))
 	mux.Handle("GET /admin/new/students", s.staff(s.handleNewStudents))
 	mux.Handle("GET /admin/new/students/slips", s.staff(s.handleNewSlips))
 	mux.Handle("GET /admin/new/students/{id}", s.staff(s.handleNewStudent))
