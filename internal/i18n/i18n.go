@@ -574,6 +574,7 @@ var messages = map[string][2]string{
 	"students.tg_account":     {"Telegram account", "Аккаунт Telegram"},
 	"students.edit":           {"Edit name, group or login", "Изменить имя, группу или логин"},
 	"students.login":          {"Platform login", "Логин на платформе"},
+	"students.login_optional": {"Platform login (optional)", "Логин на платформе (необязательно)"},
 
 	// Admin: Student detail
 	"student.visits":         {"Visits", "Посещения"},

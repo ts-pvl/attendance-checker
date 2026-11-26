@@ -84,6 +84,7 @@
     <label>{{t "c.name"}} <input name="name" required></label>
     <label>{{t "c.group"}} <input name="group" list="groups"></label>
     <datalist id="groups">{{range .Groups}}<option value="{{.}}">{{end}}</datalist>
+    <label>{{t "students.login_optional"}} <input name="login" autocomplete="off" spellcheck="false" placeholder="jdoe"></label>
     <button class="btn primary">{{t "c.add"}}</button>
   </form>
 </section>

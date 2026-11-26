@@ -530,9 +530,9 @@ func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddStudent(w http.ResponseWriter, r *http.Request) {
-	_, err := core.AddStudent(r.Context(), s.DB, s.Now(), r.PostFormValue("name"), r.PostFormValue("group"), staffFrom(r).Username)
+	_, err := core.AddStudentLogin(r.Context(), s.DB, s.Now(), r.PostFormValue("name"), r.PostFormValue("group"), r.PostFormValue("login"), staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/students", s.t("c.error", err.Error()), true)
+		back(w, r, "/admin/students", s.coreError(err), true)
 		return
 	}
 	back(w, r, "/admin/students", s.t("c.done"), false)

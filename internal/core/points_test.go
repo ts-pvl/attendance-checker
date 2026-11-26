@@ -153,6 +153,32 @@ func TestLogins(t *testing.T) {
 	if err := SetLogin(e.ctx, e.db, T("09:00"), bob, "alices", "boss"); err != nil {
 		t.Errorf("after clearing it is free: %v", err)
 	}
+
+	// A new student can come with a login; a bad or taken one refuses the
+	// student, so nobody is added half-done.
+	var before int
+	e.db.QueryRow("SELECT COUNT(*) FROM students").Scan(&before)
+	if _, err := AddStudentLogin(e.ctx, e.db, T("09:00"), "Dana", "B", "ALICES", "boss"); err == nil || !strings.Contains(err.Error(), "Bob") {
+		t.Errorf("new student with Bob's login: %v", err)
+	}
+	if _, err := AddStudentLogin(e.ctx, e.db, T("09:00"), "Dana", "B", "da na", "boss"); !errors.Is(err, ErrBadPlatformLogin) {
+		t.Errorf("new student with a bad login: %v", err)
+	}
+	var after int
+	e.db.QueryRow("SELECT COUNT(*) FROM students").Scan(&after)
+	if after != before {
+		t.Errorf("refused students were added: %d -> %d", before, after)
+	}
+	id, err := AddStudentLogin(e.ctx, e.db, T("09:00"), " Dana  Lee ", "B", "@dlee", "boss")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var name, login, journal string
+	e.db.QueryRow("SELECT name, login FROM students WHERE id = ?", id).Scan(&name, &login)
+	e.db.QueryRow("SELECT details FROM audit_log WHERE action = 'add_student' ORDER BY id DESC").Scan(&journal)
+	if name != "Dana Lee" || login != "dlee" || journal != `Dana Lee, login "dlee"` {
+		t.Errorf("new student: %q %q, journal %q", name, login, journal)
+	}
 }
 
 // The login column of a student CSV. By hand:

@@ -235,18 +235,39 @@ func studentByName(ctx context.Context, tx *sql.Tx, name string) (id int64, oldN
 
 // AddStudent creates one student.
 func AddStudent(ctx context.Context, db *store.DB, now time.Time, name, group, actor string) (int64, error) {
+	return AddStudentLogin(ctx, db, now, name, group, "", actor)
+}
+
+// AddStudentLogin adds a student with a platform login ("" for none). A
+// login that is malformed or another student's refuses the whole student.
+func AddStudentLogin(ctx context.Context, db *store.DB, now time.Time, name, group, login, actor string) (int64, error) {
 	name = strings.Join(strings.Fields(name), " ")
 	if name == "" {
 		return 0, errors.New("name is required")
 	}
+	login, err := CleanLogin(login)
+	if err != nil {
+		return 0, err
+	}
 	var id int64
-	err := db.InTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, "INSERT INTO students(name, grp, created_at) VALUES(?, ?, ?)", name, strings.TrimSpace(group), store.Ms(now))
+	err = db.InTx(ctx, func(tx *sql.Tx) error {
+		if login != "" {
+			if other, owner, err := loginOwner(ctx, tx, login, 0); err != nil {
+				return err
+			} else if other != 0 {
+				return &LoginTakenError{login, owner}
+			}
+		}
+		res, err := tx.ExecContext(ctx, "INSERT INTO students(name, grp, login, created_at) VALUES(?, ?, ?, ?)", name, strings.TrimSpace(group), login, store.Ms(now))
 		if err != nil {
 			return err
 		}
 		id, _ = res.LastInsertId()
-		return store.Audit(ctx, tx, now, actor, "add_student", fmt.Sprintf("student:%d", id), name)
+		details := name
+		if login != "" {
+			details += fmt.Sprintf(", login %q", login)
+		}
+		return store.Audit(ctx, tx, now, actor, "add_student", fmt.Sprintf("student:%d", id), details)
 	})
 	return id, err
 }
