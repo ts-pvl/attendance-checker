@@ -60,11 +60,6 @@ anomaly_multi_pc = 15m
 # long visits.
 anomaly_low_activity_gap = 10m
 anomaly_long_visit = 6h
-# Learning platform: set it up on the Platform tab of the new admin UI. How
-# often the server reads it (0 = only when asked), and where it keeps the
-# access token (by default next to the database).
-platform_sync_every = 1h
-#platform_token_file = /var/lib/attendance/platform_token
 # /healthz (and the alert script) turn red after this long without heartbeats
 # (only if the last PC session timed out) or without contact with Telegram.
 alert_after = 15m

@@ -21,10 +21,8 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * Every user-visible string lives in `internal/i18n` in both English and Russian.
 * Never log or paste the bot token, host key, token secret or real student data. Use a separate test bot and fake data.
 * **Strict CSP:** no inline `<script>`, `style=` or `<style>` in templates. Charts and bars are server-rendered SVG with attributes; behaviour goes in `internal/web/static/*.js`.
-* **Platform token:** the learning-platform access token travels in a URL. It lives only in `platform_token_file`; never put it in the database, the journal, a log, a page or an error. `platform.Client` strips URLs from errors and masks the token; keep it that way (`TestTokenNeverInErrors`).
-* **Peer-help rules: tests first**, like hours: the resolving and counting rules are documented in `internal/help/help.go`, and the tests use invented logins only. Never commit a real form export.
 * **Browser storage** is for small conveniences only, never for data: `localStorage` holds the light/dark theme, `sessionStorage` the dashboard dates for one browser tab (cleared on reload). Shared settings, such as the Today grid layout, go in the `settings` table and the journal.
-* **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`, with the tabs Dashboard, Today, Students, Anomalies, Peer help, Platform and Journal). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
+* **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`, with the tabs Dashboard, Today, Students, Anomalies and Journal). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
 * `admin_ansible/` is a copy of the school's real Ansible inventory, for reference only. Never commit it.
 * The lab PCs boot with overlayroot. The agent role writes to the lower disk by remounting it; do not copy files through `overlayroot-chroot` (see `docs/decisions.md`).
 * User-facing docs come in English, Russian and Kazakh: `README.md`, `README.ru.md`, `README.kk.md`, and the staff runbook and student instructions in `docs/` (`.md`/`.en.md`, `.ru.md`, `.kk.md`). Update all three together and keep them simple: the readers run a school, not a codebase. `docs/development.md` and `docs/decisions.md` are English only.
@@ -34,7 +32,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 
 `internal/token/`, `internal/core/checkin.go`, `internal/core/enroll.go`,
 `internal/core/engine.go`, `internal/web/auth.go`, `internal/web/pc.go`,
-`internal/platform/client.go`, `agent/idle_logout`.
+`agent/idle_logout`.
 
 ## Commands
 

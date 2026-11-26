@@ -35,43 +35,6 @@
   {{end}}
 </section>
 
-{{if or $admin .Batches}}
-<section class="card" id="points">
-  <h2>{{t "points.title"}}</h2>
-  {{if $admin}}
-  <p class="muted hint">{{t "points.present_hint"}}</p>
-  <form method="post" action="/admin/points/present" class="filters" data-confirm="{{t "points.present_confirm"}}">
-    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
-    <input type="hidden" name="return" value="{{.Table.Self}}">
-    <label class="field">{{t "points.points"}} <input type="number" name="points" min="1" max="{{.MaxPoints}}" step="1" required class="num-input"></label>
-    <label class="field grow">{{t "c.reason"}} <input name="reason" maxlength="300" placeholder="{{t "points.reason_ph"}}" required></label>
-    <button class="btn primary">{{t "points.add_present"}}</button>
-  </form>
-  {{end}}
-  {{if .Batches}}
-  <h3 class="sub-h">{{t "points.today"}}</h3>
-  <div class="table-wrap">
-  <table class="list">
-    <thead><tr><th><span class="th">{{t "c.when"}}</span></th><th class="num"><span class="th">{{t "points.points"}}</span></th><th><span class="th">{{t "c.reason"}}</span></th>
-      <th class="num"><span class="th">{{t "points.students"}}</span></th><th><span class="th">{{t "c.who"}}</span></th>{{if $admin}}<th></th>{{end}}</tr></thead>
-    <tbody>
-    {{range .Batches}}
-    <tr class="{{if .Cancelled}}deleted{{end}}">
-      <td>{{clock .Created}}</td><td class="num">+{{.Points}}</td><td class="wrap">{{.Reason}}</td><td class="num">{{.Students}}</td><td class="muted">{{.Actor}}</td>
-      {{if $admin}}<td class="actions">{{if not .Cancelled}}
-        <form method="post" action="/admin/points/batch/{{.Batch}}/cancel" data-confirm="{{t "points.cancel_confirm"}}">
-          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$.D.Table.Self}}">
-          <button class="btn small">{{t "points.cancel"}}</button>
-        </form>{{else}}<span class="pill">{{t "points.cancelled"}}</span>{{end}}</td>{{end}}
-    </tr>
-    {{end}}
-    </tbody>
-  </table>
-  </div>
-  {{end}}
-</section>
-{{end}}
-
 <section class="card">
   <div class="c-head">
     <h2>{{t "ntoday.recent"}}</h2>

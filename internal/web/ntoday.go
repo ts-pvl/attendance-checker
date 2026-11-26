@@ -135,8 +135,6 @@ type nTodayData struct {
 	Custom                bool
 	Busy, NoCheckin, Free int
 	Table                 recentView
-	Batches               []core.PointsBatch // points given to everyone present today
-	MaxPoints             int
 }
 
 func (s *Server) handleNewToday(w http.ResponseWriter, r *http.Request) {
@@ -278,11 +276,6 @@ func (s *Server) newToday(ctx context.Context, o recentOpts) (*nTodayData, error
 	if d.Table, err = s.recentSessions(ctx, now, o); err != nil {
 		return nil, err
 	}
-	day := s.Calc.PeriodAt("day", now)
-	if d.Batches, err = core.Batches(ctx, s.DB, day.From, day.To); err != nil {
-		return nil, err
-	}
-	d.MaxPoints = core.MaxPoints
 	return d, nil
 }
 

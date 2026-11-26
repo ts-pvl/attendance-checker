@@ -158,14 +158,6 @@ See `deploy/attendance.conf.example`. Secrets (bot token, host key) are
 root-only files that systemd passes to the service with `LoadCredential=`.
 The QR token HMAC key is generated on first start in `/var/lib/attendance/token_secret`.
 
-The learning platform (`internal/platform`) is set up in the admin UI, not
-in the config file: the address and events go in the `settings` table, and
-the access token is written by the service to `platform_token_file`
-(default `/var/lib/attendance/platform_token`, mode 0600), so database
-backups never contain it. The token travels in a URL (`/api/auth/token?token=`),
-so `Client` strips URLs from errors and replaces the token with `***` in
-every message it returns.
-
 ## CLI
 
 ```
@@ -177,7 +169,6 @@ attendance code <student-id>            # one-time enrollment link
 attendance unlink <student-id> -reason "…"
 attendance replay                       # rebuild visits from raw events (stop the service first)
 attendance backup <file>
-attendance platform sync                # one sync now; prints counts only
 attendance gen-key
 attendance version
 ```

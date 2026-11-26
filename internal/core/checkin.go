@@ -69,7 +69,6 @@ type Student struct {
 	Name     string
 	Group    string
 	Archived bool
-	Login    string // on the learning platform; "" while unknown
 }
 
 // LinkedStudent returns the student linked to a Telegram account, or nil.
