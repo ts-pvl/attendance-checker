@@ -9,7 +9,10 @@
 //  2. Alias: a typed login that staff have resolved by hand.
 //  3. Exact: a known login.
 //  4. Name: two or more words that are all words of exactly one person's
-//     name (the student's name or the name on the platform).
+//     name (the student's name, or the platform's name in Cyrillic or in
+//     Latin letters). Words are compared as core.NameWords does: without
+//     case, with ё as е, the Kazakh letters as their Russian look-alikes
+//     (ә as а, і as и, ұ and ү as у, …) and Latin look-alikes as one.
 //  5. Typo: removing spaces gives a known login; or exactly one known login
 //     is one edit away (a letter added, missing, wrong, or two neighbours
 //     swapped) and the text has at least 4 characters.
@@ -28,6 +31,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"attendance/internal/core"
 )
 
 // Answer is one row of the form.
@@ -62,11 +67,6 @@ type Match struct {
 	Suggest string // for Unknown: a likely login for staff to confirm
 }
 
-var homoglyphs = strings.NewReplacer(
-	"А", "A", "В", "B", "Е", "E", "К", "K", "М", "M", "Н", "H", "О", "O", "Р", "P", "С", "C", "Т", "T", "Х", "X", "У", "Y", "І", "I", "Ј", "J", "Ѕ", "S",
-	"а", "a", "е", "e", "о", "o", "р", "p", "с", "c", "у", "y", "х", "x", "к", "k", "і", "i", "ј", "j", "ѕ", "s",
-)
-
 func trimJunk(s string) string {
 	return strings.TrimFunc(s, func(r rune) bool {
 		return unicode.IsSpace(r) || r == '\u200b' || r == '\ufeff' || strings.ContainsRune(`"'«»“”„@`, r)
@@ -75,7 +75,7 @@ func trimJunk(s string) string {
 
 // Normalize is rule 1, the key for exact matches and aliases.
 func Normalize(s string) string {
-	return strings.ToLower(homoglyphs.Replace(trimJunk(s)))
+	return strings.ToLower(core.LatinLookalikes(trimJunk(s)))
 }
 
 func loginLike(s string) bool {
@@ -90,11 +90,7 @@ func loginLike(s string) bool {
 	return true
 }
 
-// nameWords: lower case, ё as е, split on spaces, hyphens and dots.
-func nameWords(s string) []string {
-	s = strings.ReplaceAll(strings.ToLower(trimJunk(s)), "ё", "е")
-	return strings.FieldsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '-' || r == '.' || r == ',' })
-}
+func nameWords(s string) []string { return core.NameWords(trimJunk(s)) }
 
 // Matcher resolves typed logins against the known people.
 type Matcher struct {

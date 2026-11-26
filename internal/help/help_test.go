@@ -24,6 +24,7 @@ var people = []Person{
 	{Login: "tnur", Names: []string{"Нуров Тимур"}},
 	{Login: "aiko"},
 	{Login: "dana42", Names: []string{"Сейт Дана"}},
+	{Login: "nkul", Names: []string{"Құлов Нұрлан", "Nurlan Kulov"}}, // a Kazakh name, and in Latin letters
 }
 
 func TestNormalize(t *testing.T) {
@@ -65,7 +66,10 @@ func TestResolve(t *testing.T) {
 		{"Петров Иван", Match{Login: "jdoe", How: Name}},
 		{"иван петров", Match{Login: "jdoe", How: Name}},
 		{"Smith Anna", Match{Login: "asmith", How: Name}},
-		{"Иван", Match{How: Unknown}}, // one word is not enough for a name
+		{"Кулов Нурлан", Match{Login: "nkul", How: Name}}, // Russian у, к for the Kazakh ұ, қ
+		{"nurlan kulov", Match{Login: "nkul", How: Name}}, // the Latin name
+		{"Петрoв Иван", Match{Login: "jdoe", How: Name}},  // a Latin o in a Cyrillic word
+		{"Иван", Match{How: Unknown}},                     // one word is not enough for a name
 		{"zzzz", Match{How: Unknown}},
 		{"   ", Match{How: Empty}},
 	} {
@@ -217,7 +221,7 @@ func TestStore(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)
 	db.Exec(`INSERT INTO students(name, login, created_at) VALUES('Петров Иван', 'jdoe', 0), ('Ли Мария', 'mlee', 0), ('No Login', '', 0)`)
-	db.Exec(`INSERT INTO platform_users(id, login, first_name, last_name, synced_at) VALUES(1, 'asmith', 'Anna', 'Smith', 0), (2, 'jdoe', 'Иван', 'Петров', 0)`)
+	db.Exec(`INSERT INTO platform_users(id, login, first_name, last_name, other_name, synced_at) VALUES(1, 'asmith', 'Anna', 'Smith', '', 0), (2, 'jdoe', 'Иван', 'Петров', 'Ivan Petrov', 0)`)
 	answers := []Answer{{Row: 2, Respondent: "jdoe", Name: "Петров Иван", Peers: []string{"asmith", "malee", "mlee1x"}}}
 	if _, err := Import(ctx, db, now, "2026-11-10", "w.xlsx", answers, "boss"); err != ErrBadWeek {
 		t.Errorf("a Tuesday: %v", err)
@@ -228,6 +232,10 @@ func TestStore(t *testing.T) {
 	m, err := LoadMatcher(ctx, db)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// The platform's name in Latin letters is a name too.
+	if got := m.Resolve("Ivan Petrov"); got != (Match{Login: "jdoe", How: Name}) {
+		t.Errorf("Latin name: %+v", got)
 	}
 	all, err := TallyAll(ctx, db, m)
 	// asmith exact; "malee" is one edit from mlee: a typo; "mlee1x" is two

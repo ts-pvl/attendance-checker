@@ -130,7 +130,10 @@ func itoa(n int) string {
 
 func TestLogins(t *testing.T) {
 	e := newEnv(t)
-	for _, c := range []struct{ in, want string }{{" @Alice_01 ", "Alice_01"}, {"", ""}, {"a.b-c", "a.b-c"}} {
+	// Cyrillic letters that look like Latin ones (a login typed with the
+	// wrong keyboard layout) become the Latin ones.
+	for _, c := range []struct{ in, want string }{{" @Alice_01 ", "Alice_01"}, {"", ""}, {"a.b-c", "a.b-c"},
+		{"123\u0430", "123a"}, {"\u0408D\u043e\u0435", "JDoe"}} {
 		if got, err := CleanLogin(c.in); err != nil || got != c.want {
 			t.Errorf("CleanLogin(%q) = %q, %v", c.in, got, err)
 		}
@@ -216,5 +219,33 @@ func TestImportLogins(t *testing.T) {
 	res, _ = ImportStudents(e.ctx, e.db, T("09:00"), strings.NewReader("name,group,login\nFrank Old,C,frank5\n"), "boss")
 	if res.Updated != 1 || res.Added != 0 || login("Frank Old") != "frank5" {
 		t.Errorf("legacy id as login: %+v, login %q", res, login("Frank Old"))
+	}
+}
+
+// Names are compared word by word, ignoring case and the letters people
+// write either way: ё/е, the Kazakh letters and their Russian look-alikes,
+// Latin and Cyrillic look-alikes. Pairs worked out by hand.
+func TestNameWords(t *testing.T) {
+	same := [][2]string{
+		{"Нұрлан Әлібек", "Нурлан Алибек"},
+		{"Ғалым Қуаныш", "Галым Куаныш"},
+		{"Өмір Үмбет", "Омир Умбет"},
+		{"Ерңар Һади", "Ернар Хади"},
+		{"Семён", "СЕМЕН"},
+		{"Д\u0061на", "Дана"}, // a Latin a
+		{"Anna-Maria  Lee.", "anna maria lee"},
+	}
+	for _, p := range same {
+		if a, b := NameWords(p[0]), NameWords(p[1]); strings.Join(a, " ") != strings.Join(b, " ") {
+			t.Errorf("NameWords(%q) = %q, NameWords(%q) = %q: want the same", p[0], a, p[1], b)
+		}
+	}
+	for _, p := range [][2]string{{"Дана", "Дина"}, {"Алия", "Алина"}, {"Anna", "Anya"}} {
+		if a, b := NameWords(p[0]), NameWords(p[1]); strings.Join(a, " ") == strings.Join(b, " ") {
+			t.Errorf("NameWords(%q) and NameWords(%q) are both %q", p[0], p[1], a)
+		}
+	}
+	if n := len(NameWords(" Анна-Мария, Ли. ")); n != 3 {
+		t.Errorf("%d words, want 3", n)
 	}
 }

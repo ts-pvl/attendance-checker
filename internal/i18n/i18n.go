@@ -322,6 +322,8 @@ var messages = map[string][2]string{
 	// Anomalies of the new UI
 	"help.title":             {"Peer help", "Взаимопомощь"},
 	"help.intro":             {"How often students are named in the weekly form \"who helped you most\". Typed logins are matched to students' and platform logins; small typos are corrected, anything doubtful is listed for review.", "Как часто учеников называют в еженедельной форме «кто вам больше всего помог». Введённые логины сверяются с логинами учеников и платформы; мелкие опечатки исправляются, всё сомнительное попадает в список на проверку."},
+	"help.cohort_label":      {"Important", "Важно"},
+	"help.no_cohort":         {"Only your students' logins are known. Load all participants of the current piscine on the Platform tab: otherwise a classmate who is not in this system is not recognised, and a login one letter away from a student's may be counted for that student.", "Сейчас известны только логины ваших учеников. Загрузите всех участников текущего бассейна на вкладке «Платформа»: иначе одноклассник, которого нет в этой системе, не распознаётся, а логин, отличающийся от логина ученика одной буквой, может засчитаться этому ученику."},
 	"help.import":            {"Import a week's answers", "Загрузить ответы за неделю"},
 	"help.file":              {"Answers (.xlsx or .csv)", "Ответы (.xlsx или .csv)"},
 	"help.week_of":           {"Week (any day of it)", "Неделя (любой её день)"},

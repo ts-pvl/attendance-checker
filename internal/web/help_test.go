@@ -65,6 +65,18 @@ func TestHelpWeb(t *testing.T) {
 	if b := get(admin, "/admin/new/help"); !strings.Contains(b, "No week has been imported yet.") || !strings.Contains(b, `name="week" value="2026-03-02"`) {
 		t.Error("empty page, or the default week is not last week's Monday")
 	}
+	// No platform: no advice about loading its participants.
+	if b := get(admin, "/admin/new/help"); strings.Contains(b, "Load all participants") {
+		t.Error("cohort advice without a platform")
+	}
+	ts.s.Cfg.PlatformURL = "https://01.example.org"
+	if b := get(admin, "/admin/new/help"); !strings.Contains(b, "Load all participants of the current piscine") {
+		t.Error("no advice to load the cohort")
+	}
+	ts.s.DB.Exec("INSERT INTO settings(key, value) VALUES('platform_events', '10')")
+	if b := get(admin, "/admin/new/help"); strings.Contains(b, "Load all participants") {
+		t.Error("cohort advice with an event loaded")
+	}
 	if b := get(teach, "/admin/new/help"); strings.Contains(b, "/admin/help/import") {
 		t.Error("teacher sees the import form")
 	}

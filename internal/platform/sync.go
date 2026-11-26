@@ -367,15 +367,10 @@ type NameLink struct {
 	Login     string
 }
 
-// nameWords: lower case, ё as е, hyphens as spaces.
-func nameWords(s string) []string {
-	s = strings.ReplaceAll(strings.ToLower(s), "ё", "е")
-	return strings.FieldsFunc(s, func(r rune) bool { return r == ' ' || r == '-' || r == '\t' || r == '.' })
-}
-
 // LinkByName gives logins to students who have none, where a platform
 // user's first and last name (in Cyrillic, or in Latin letters) are both
-// among the words of exactly one such student's name, that student matches no other platform user, and the
+// among the words of exactly one such student's name (compared as
+// core.NameWords does: Нұрлан is Нурлан), that student matches no other platform user, and the
 // login is not already a student's. Each link is journaled.
 func LinkByName(ctx context.Context, db *store.DB, now time.Time, actor string) ([]NameLink, error) {
 	type person struct {
@@ -395,7 +390,7 @@ func LinkByName(ctx context.Context, db *store.DB, now time.Time, actor string) 
 			return nil, err
 		}
 		p.words = map[string]bool{}
-		for _, w := range nameWords(p.name) {
+		for _, w := range core.NameWords(p.name) {
 			p.words[w] = true
 		}
 		students = append(students, p)
@@ -421,11 +416,11 @@ func LinkByName(ctx context.Context, db *store.DB, now time.Time, actor string) 
 			rows.Close()
 			return nil, err
 		}
-		fw, lw := nameWords(first), nameWords(last)
+		fw, lw := core.NameWords(first), core.NameWords(last)
 		if len(fw) > 0 && len(lw) > 0 { // both names are needed
 			u.names = append(u.names, append(fw, lw...))
 		}
-		if ow := nameWords(other); len(ow) >= 2 { // "First Last" in Latin letters
+		if ow := core.NameWords(other); len(ow) >= 2 { // "First Last" in Latin letters
 			u.names = append(u.names, ow)
 		}
 		if len(u.names) > 0 {

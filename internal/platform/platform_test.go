@@ -463,7 +463,8 @@ func TestSyncer(t *testing.T) {
 //   - "Ким Борис": bkim has no names and ekim only a last name, so nothing;
 //   - "Ли Дана" matches dlee, but dlee is already the login of another student: nothing;
 //   - "Anna Smith" (archived) is not considered, so asmith stays unambiguous;
-//   - "Nurlanova Gulnara", written in Latin letters, matches gnur's other name.
+//   - "Nurlanova Gulnara", written in Latin letters, matches gnur's other name;
+//   - "Кулов Нурлан", with Russian letters, matches nkul (Құлов Нұрлан).
 func TestLinkByName(t *testing.T) {
 	db := newDB(t)
 	ctx := context.Background()
@@ -475,23 +476,24 @@ func TestLinkByName(t *testing.T) {
 		{ID: 4, Login: "dlee", FirstName: "Дана", LastName: "Ли"},
 		{ID: 5, Login: "ekim", LastName: "Ким"}, // a last name alone is not enough
 		{ID: 6, Login: "gnur", FirstName: "Гульнара", LastName: "Нурланова", OtherName: "Gulnara Nurlanova"},
+		{ID: 7, Login: "nkul", FirstName: "Нұрлан", LastName: "Құлов"},
 	}}); err != nil {
 		t.Fatal(err)
 	}
 	mustExec(t, db, `INSERT INTO students(id, name, login, archived, created_at) VALUES
 		(1, 'Петров Иван', '', 0, 0), (2, 'Петров Иван Сергеевич', '', 0, 0), (3, 'Smith Anna Maria', '', 0, 0),
 		(4, 'Ким Борис', '', 0, 0), (5, 'Ли Дана', '', 0, 0), (6, 'Dana Lee Old', 'dlee', 0, 0), (7, 'Anna Smith', '', 1, 0),
-		(8, 'Nurlanova Gulnara', '', 0, 0)`)
+		(8, 'Nurlanova Gulnara', '', 0, 0), (9, 'Кулов Нурлан', '', 0, 0)`)
 	links, err := LinkByName(ctx, db, now, "boss")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(links) != "[{3 Smith Anna Maria asmith} {8 Nurlanova Gulnara gnur}]" {
+	if fmt.Sprint(links) != "[{3 Smith Anna Maria asmith} {8 Nurlanova Gulnara gnur} {9 Кулов Нурлан nkul}]" {
 		t.Errorf("links: %v", links)
 	}
 	var n int
 	db.QueryRow("SELECT COUNT(*) FROM audit_log WHERE action = 'set_login' AND actor = 'boss'").Scan(&n)
-	if n != 2 {
+	if n != 3 {
 		t.Errorf("journal: %d", n)
 	}
 	// Run again: nothing new.

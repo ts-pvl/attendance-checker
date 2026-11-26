@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"attendance/internal/help"
+	"attendance/internal/platform"
 )
 
 // The Peer help tab: the weekly form "who helped you most", imported per
@@ -53,6 +54,7 @@ type nHelpData struct {
 	Logins      []string // for the alias inputs
 	DefaultWeek string   // for the import form
 	Stats       struct{ Counted, Self, Repeat, Superseded, Unresolved int }
+	NoCohort    bool // the platform is there, but no event's participants are loaded
 }
 
 var helpSorts = map[string]struct {
@@ -87,6 +89,12 @@ func (s *Server) handleNewHelp(w http.ResponseWriter, r *http.Request) {
 	}
 	d := &nHelpData{Week: q.Get("week"), Group: q.Get("group"),
 		DefaultWeek: s.Calc.PeriodAt("week", s.Now().AddDate(0, 0, -3)).From.Format("2006-01-02")}
+	// Without the whole cohort only the students' logins are known: a
+	// classmate's login one letter away from a student's would be taken for
+	// a typo of it.
+	if set, err := platform.LoadSettings(ctx, s.DB); err == nil && s.Cfg.PlatformURL != "" && len(set.Events) == 0 {
+		d.NoCohort = true
+	}
 	for _, t := range tallies {
 		d.Weeks = append(d.Weeks, t.Week)
 	}

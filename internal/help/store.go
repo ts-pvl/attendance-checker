@@ -124,7 +124,8 @@ func LoadAnswers(ctx context.Context, q store.Querier, importID int64) ([]Answer
 // name) and platform users (by the name on the platform).
 func People(ctx context.Context, q store.Querier) ([]Person, error) {
 	rows, err := q.QueryContext(ctx, `SELECT login, name FROM students WHERE login <> ''
-		UNION ALL SELECT login, trim(last_name || ' ' || first_name) FROM platform_users`)
+		UNION ALL SELECT login, trim(last_name || ' ' || first_name) FROM platform_users
+		UNION ALL SELECT login, other_name FROM platform_users WHERE other_name <> ''`)
 	if err != nil {
 		return nil, err
 	}

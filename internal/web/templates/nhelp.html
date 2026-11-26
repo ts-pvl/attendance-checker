@@ -3,6 +3,7 @@
 {{with .D}}
 <h1>{{t "help.title"}}</h1>
 <p class="sub">{{t "help.intro"}}</p>
+{{if .NoCohort}}<section class="card"><p><span class="pill warn">{{t "help.cohort_label"}}</span> {{t "help.no_cohort"}} <a href="/admin/new/platform">{{t "nav.platform"}}</a></p></section>{{end}}
 
 {{if $admin}}
 <section class="card">
