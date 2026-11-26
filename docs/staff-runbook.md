@@ -106,20 +106,25 @@ one student, use the same fields on the student's page. A mistake is undone
 with *Cancel*: the entry stays in the list, crossed out, and both steps are in
 the Journal.
 
-**Learning platform** (admins, once). The system can read each student's
-login, XP and audit ratio from the 01Edu learning platform.
+**Learning platform** (admins, once). The system reads each student's level,
+XP and audit ratio from the school's learning platform, by the student's
+platform login. The platform's address is already in the server's settings.
 
 1. A platform admin logs in to the platform's Git (`https://<platform>/git`),
    opens *Settings → Applications* and presses *Generate New Token*.
-2. In the new interface open *Platform → Settings*. Enter the platform
-   address, the numbers of the events (cohorts) to read and the token, then
+2. In the new interface open *Platform → Settings*, paste the token and press
    *Save*.
-3. Press *Sync now*. From then on the server syncs every hour by itself.
+3. Give the students their platform logins: in the *Add student* form, on the
+   student's page (*Edit name, group or login*), or with a `login` column in
+   the student list file.
+4. Press *Sync now*. From then on the server syncs every hour by itself.
 
-Students are matched to the platform by login. Set the logins with a `login`
-column in the student list file, on each student's page, or with *Link
-students by name*. That button links only students whose name matches exactly
-one platform user, and every link is in the Journal. The token stays on the
+The *Platform* tab then lists the events your students are in. On the current
+piscine press *Load all participants*: everyone in it is read, so that *Link
+students by name* can give logins to the students who still have none, and
+peer help knows every classmate. *Link students by name* links only students
+whose name matches exactly one person, and every link is in the Journal. A
+student's page shows their level and XP in each event. The token stays on the
 server and is never shown again; to replace it, enter a new one.
 
 **Peer help** (weekly). Download the answers of the "who helped you most"
@@ -128,7 +133,10 @@ week. The tab shows how many times each student was named. Logins with a
 small typo are corrected automatically. Anything uncertain appears under *To
 check* and does not count until you enter the right login there; that login is
 then used for every week. If someone answered twice, only their last answer
-counts, and naming yourself does not count.
+counts, and naming yourself does not count. Before the first import, load all
+participants of the current piscine on the *Platform* tab: otherwise a
+classmate who is not in this system is not recognised, and a login one letter
+away from a student's may be counted for that student.
 
 ## Staff accounts (on the server)
 

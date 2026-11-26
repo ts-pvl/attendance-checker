@@ -22,13 +22,14 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * Never log or paste the bot token, host key, token secret or real student data. Use a separate test bot and fake data.
 * **Strict CSP:** no inline `<script>`, `style=` or `<style>` in templates. Charts and bars are server-rendered SVG with attributes; behaviour goes in `internal/web/static/*.js`.
 * **Platform token:** the learning-platform access token travels in a URL. It lives only in `platform_token_file`; never put it in the database, the journal, a log, a page or an error. `platform.Client` strips URLs from errors and masks the token; keep it that way (`TestTokenNeverInErrors`).
+* **Platform data:** read only what is needed. A user's `attrs` holds ID numbers, addresses, phones and medical notes: ask only for single name paths (`attrs(path: "firstNameCyr")`), never for `attrs` as a whole; the fake platform in the tests fails such a query. Ids and logins go in GraphQL variables, never in the query text. Tests never reach the real platform: they set `platform_url` to "" or to a fake server.
 * **Peer-help rules: tests first**, like hours: the resolving and counting rules are documented in `internal/help/help.go`, and the tests use invented logins only. Never commit a real form export.
 * **Browser storage** is for small conveniences only, never for data: `localStorage` holds the light/dark theme, `sessionStorage` the dashboard dates for one browser tab (cleared on reload). Shared settings, such as the Today grid layout, go in the `settings` table and the journal.
 * **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`, with the tabs Dashboard, Today, Students, Anomalies, Peer help, Platform and Journal). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
 * `admin_ansible/` is a copy of the school's real Ansible inventory, for reference only. Never commit it.
 * The lab PCs boot with overlayroot. The agent role writes to the lower disk by remounting it; do not copy files through `overlayroot-chroot` (see `docs/decisions.md`).
 * User-facing docs come in English, Russian and Kazakh: `README.md`, `README.ru.md`, `README.kk.md`, and the staff runbook and student instructions in `docs/` (`.md`/`.en.md`, `.ru.md`, `.kk.md`). Update all three together and keep them simple: the readers run a school, not a codebase. `docs/development.md` and `docs/decisions.md` are English only.
-* The repository is public. Keep school-specific details (real host names, addresses, ports, people) out of code, docs and commit messages.
+* The repository is public. Keep school-specific details (real host names, addresses, ports, people) out of code, docs and commit messages. The one exception, at the school's request, is the learning platform's public address (`config.DefaultPlatformURL`).
 
 ## Files a human must read line by line after any change
 

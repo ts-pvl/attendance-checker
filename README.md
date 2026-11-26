@@ -25,7 +25,7 @@ A web page (the admin UI), open only inside the school network:
 * hours of every student per day, week and month, with export to a spreadsheet (CSV);
 * charts of attendance, an attendance table by day, and a list of unusual visits;
 * points for social activities, for everyone present or for one student;
-* students' logins, XP and audit ratio from the 01Edu learning platform;
+* students' levels, XP and audit ratio from the learning platform, by their platform logins;
 * how often each student is named in the weekly "who helped you most" form;
 * corrections with a reason, and a log of every change.
 
