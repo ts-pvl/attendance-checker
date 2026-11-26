@@ -38,6 +38,7 @@
   <tr>
     <td><a class="name" href="/admin/new/students/{{.ID}}" hx-boost="false">{{.Name}}</a>{{if .Archived}} <span class="pill">{{t "students.archived"}}</span>{{end}}</td>
     <td class="muted">{{.Group}}</td>
+    <td class="mono">{{.Login}}</td>
     <td>
       {{if .Linked}}<span class="pill ok">{{t "students.linked"}}</span> <small class="muted">{{.TGName}}{{if .TGUsername}} @{{.TGUsername}}{{end}}</small>
       {{else if eq .CodeState "pending"}}<span class="pill warn">{{t "students.code_pending"}}</span> <small class="muted">{{t "students.expires" (date .CodeExpires)}}</small>

@@ -19,6 +19,7 @@ import (
 	"attendance/internal/app"
 	"attendance/internal/config"
 	"attendance/internal/core"
+	"attendance/internal/platform"
 	"attendance/internal/store"
 	"attendance/internal/token"
 )
@@ -40,6 +41,7 @@ Usage:
   attendance unlink <student-id> -reason "…" unlink a Telegram account
   attendance replay                          rebuild visits from raw events (stop the service first)
   attendance backup <file>                   write a consistent copy of the database
+  attendance platform sync                   read logins, XP and audit ratios from the learning platform now
   attendance gen-key                         print a random host key
   attendance version
 
@@ -53,7 +55,7 @@ func main() {
 		os.Exit(2)
 	}
 	cmd, args := os.Args[1], os.Args[2:]
-	if (cmd == "user" || cmd == "students") && len(args) > 0 {
+	if (cmd == "user" || cmd == "students" || cmd == "platform") && len(args) > 0 {
 		cmd, args = cmd+" "+args[0], args[1:]
 	}
 	var err error
@@ -82,6 +84,8 @@ func main() {
 		err = replay(args)
 	case "backup":
 		err = backup(args)
+	case "platform sync":
+		err = platformSync(args)
 	case "gen-key":
 		fmt.Println(hex.EncodeToString(token.NewSecret(24)))
 	case "version":
@@ -452,4 +456,30 @@ func backup(args []string) error {
 	}
 	defer db.Close()
 	return db.Backup(context.Background(), fs.Arg(0))
+}
+
+// platformSync runs one sync and prints counts only: no names or logins.
+func platformSync(args []string) error {
+	_, cfgPath, err := flags("platform sync", args, nil)
+	if err != nil {
+		return err
+	}
+	cfg, db, err := openDB(*cfgPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	s := &platform.Syncer{DB: db, TokenFile: cfg.PlatformTokenPath()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	res, err := s.Sync(ctx, time.Now(), "cli")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("platform users: %d (with XP: %d)\nstudents linked: %d\nstudents whose login is not on the platform: %d\nstudents without a login: %d\n",
+		res.Users, res.WithXP, res.Linked, res.UnknownLogins, res.StudentsNoLogin)
+	for _, w := range res.Warnings {
+		fmt.Println("warning:", w)
+	}
+	return nil
 }

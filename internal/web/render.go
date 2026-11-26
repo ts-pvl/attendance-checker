@@ -20,7 +20,7 @@ type pageTemplate = template.Template
 var layoutPages = []string{"login", "today", "hours", "students", "student", "slips", "anomalies", "audit"}
 
 // Pages of the new admin UI (nlayout.html).
-var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanomalies", "njournal", "ntoday"}
+var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanomalies", "njournal", "ntoday", "nplatform", "nhelp"}
 
 type anomListData struct {
 	Visits []anomVisit

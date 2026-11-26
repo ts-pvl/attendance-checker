@@ -22,6 +22,8 @@
     <a href="/admin/new/today" {{if eq $p "ntoday"}}aria-current="page"{{end}}>{{t "nav.today"}}</a>
     <a href="/admin/new/students" {{if or (eq $p "nstudents") (eq $p "nstudent") (eq $p "nslips")}}aria-current="page"{{end}}>{{t "nav.students"}}</a>
     <a href="/admin/new/anomalies" {{if eq $p "nanomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>
+    <a href="/admin/new/help" {{if eq $p "nhelp"}}aria-current="page"{{end}}>{{t "nav.help"}}</a>
+    <a href="/admin/new/platform" {{if eq $p "nplatform"}}aria-current="page"{{end}}>{{t "nav.platform"}}</a>
     {{with .Staff}}{{if .IsAdmin}}<a href="/admin/new/journal" {{if eq $p "njournal"}}aria-current="page"{{end}}>{{t "nav.audit"}}</a>{{end}}{{end}}
   </nav>
   <div class="dh-right">
