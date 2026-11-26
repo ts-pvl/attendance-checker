@@ -97,6 +97,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("POST /admin/platform/settings", s.admin(s.handlePlatformSettings))
 	mux.Handle("POST /admin/platform/sync", s.admin(s.handlePlatformSync))
 	mux.Handle("POST /admin/platform/link", s.admin(s.handlePlatformLink))
+	mux.Handle("POST /admin/platform/event", s.admin(s.handlePlatformEvent))
 	mux.Handle("POST /admin/points/present", s.admin(s.handlePointsPresent))
 	mux.Handle("POST /admin/points/batch/{id}/cancel", s.admin(s.handlePointsBatchCancel))
 	mux.Handle("POST /admin/points/{id}/cancel", s.admin(s.handlePointsCancel))

@@ -14,6 +14,7 @@ import (
 	"attendance/internal/core"
 	"attendance/internal/dash"
 	"attendance/internal/hours"
+	"attendance/internal/platform"
 	"attendance/internal/store"
 )
 
@@ -165,6 +166,9 @@ type nStudentData struct {
 	PointsTotal int
 	MaxPoints   int
 	Platform    *platformUser // the platform user with the student's login
+	PlatEvents  []platformUserEvent
+	PlatReady   bool      // a sync can run (address and token)
+	PlatSynced  time.Time // the last good sync; zero: never
 	HelpTotal   int
 	HelpWeeks   []helpWeek // weeks the student was named, newest first
 }
@@ -190,6 +194,16 @@ func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
 		if nd.Platform, err = s.studentPlatform(r.Context(), d.Student.Login); err != nil {
 			s.serverError(w, err)
 			return
+		}
+		if nd.Platform != nil {
+			if nd.PlatEvents, err = s.userEvents(r.Context(), nd.Platform); err != nil {
+				s.serverError(w, err)
+				return
+			}
+		}
+		nd.PlatReady = s.syncer().Ready()
+		if st, err := platform.LoadStatus(r.Context(), s.DB); err == nil {
+			nd.PlatSynced = st.LastSync
 		}
 		if d.Student.Login != "" {
 			_, tallies, err := s.helpCounts(r.Context())

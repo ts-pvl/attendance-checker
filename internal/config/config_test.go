@@ -63,12 +63,40 @@ func TestLoadRejects(t *testing.T) {
 		"bad clock":          base + "cleanup_at = 25:00\n",
 		"bad language":       base + "lang = de\n",
 		"missing equals":     base + "listen 0.0.0.0:80\n",
+		"platform over http": base + "platform_url = http://01.example.org\n",
+		"platform with path": base + "platform_url = https://01.example.org/api\n",
+		"platform no scheme": base + "platform_url = 01.example.org\n",
 	}
 	for name, body := range cases {
 		if _, err := Load(write(t, body)); err == nil {
 			t.Errorf("%s: accepted", name)
 		} else if strings.Contains(err.Error(), "no such file") {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// The platform address is fixed in the configuration, so staff never type
+// it: the default is the school's platform; platform_url replaces it, and an
+// empty one turns the integration off.
+func TestPlatformURL(t *testing.T) {
+	c, err := Load(write(t, "bot_username = b\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.PlatformURL != "https://01.tomorrow-school.ai" {
+		t.Errorf("default platform_url = %q", c.PlatformURL)
+	}
+	for in, want := range map[string]string{
+		"https://01.Example.org":  "https://01.example.org",
+		"https://01.example.org/": "https://01.example.org",
+		"":                        "",
+	} {
+		c, err := Load(write(t, "bot_username = b\nplatform_url = "+in+"\n"))
+		if err != nil {
+			t.Errorf("platform_url = %q: %v", in, err)
+		} else if c.PlatformURL != want {
+			t.Errorf("platform_url = %q gave %q, want %q", in, c.PlatformURL, want)
 		}
 	}
 }

@@ -62,6 +62,7 @@ func newTestServer(t *testing.T) *testServer {
 	cfg.BotUsername = "TestBot"
 	cfg.Timezone, _ = time.LoadLocation("Asia/Almaty")
 	cfg.Lang = "en"
+	cfg.PlatformURL = "" // tests never reach the real platform
 	cfg.AdminNetworks = []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("127.0.0.0/8")}
 	engine := core.NewEngine(db, cfg.HeartbeatTimeout, cfg.CheckoutSlack)
 	signer := token.NewSigner(bytes.Repeat([]byte{3}, 32))

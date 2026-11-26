@@ -116,7 +116,7 @@ func New(ctx context.Context, cfg *config.Config, opts Options, log *slog.Logger
 			go a.checkBotIdentity(ctx, api)
 		}
 	}
-	a.Platform = &platform.Syncer{DB: db, TokenFile: cfg.PlatformTokenPath(), Log: log.With("part", "platform")}
+	a.Platform = &platform.Syncer{DB: db, Base: cfg.PlatformURL, TokenFile: cfg.PlatformTokenPath(), Log: log.With("part", "platform")}
 	a.Web = &web.Server{
 		Cfg: cfg, DB: db, Engine: engine, Checkin: checkin, Hosts: hosts, Board: board, Bot: a.Bot,
 		Calc: calc, HostKey: hostKey, Log: log.With("part", "web"), Now: time.Now, Platform: a.Platform,

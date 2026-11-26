@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -84,6 +85,7 @@ func (s *Server) funcs() template.FuncMap {
 		"perSelect": func(name string, opts []perOption) perSelectData { return perSelectData{name, opts} },
 		"anomList":  func(v []anomVisit, extra string) anomListData { return anomListData{v, extra} },
 		"addf":      func(a, b float64) float64 { return a + b },
+		"xp":        formatXP,
 		// Audit targets look like "student:12".
 		"hasStudent": func(target string) bool { return strings.HasPrefix(target, "student:") },
 		"studentID":  func(target string) string { return strings.TrimPrefix(target, "student:") },
@@ -215,4 +217,17 @@ func slipsPath(r *http.Request) string {
 		return "/admin/new/students/slips"
 	}
 	return "/admin/students/slips"
+}
+
+// formatXP writes XP the way the learning platform shows it: B, kB, MB
+// (1 kB = 1000 XP).
+func formatXP(xp int64) string {
+	switch a := math.Abs(float64(xp)); {
+	case a < 1000:
+		return fmt.Sprintf("%d B", xp)
+	case a < 999500:
+		return fmt.Sprintf("%.0f kB", float64(xp)/1000)
+	default:
+		return fmt.Sprintf("%.2f MB", float64(xp)/1e6)
+	}
 }

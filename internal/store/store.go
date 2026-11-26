@@ -252,6 +252,41 @@ CREATE TABLE help_aliases (
   created_at INTEGER NOT NULL
 );
 `,
+	// 3: the learning platform by event: each user's level and XP in every
+	// event. All three tables are a copy of the platform, replaced by each
+	// sync, so the old platform_users goes without a loss.
+	`
+DROP TABLE platform_users;
+CREATE TABLE platform_users (
+  id          INTEGER PRIMARY KEY,
+  login       TEXT NOT NULL,
+  first_name  TEXT NOT NULL DEFAULT '',
+  last_name   TEXT NOT NULL DEFAULT '',
+  other_name  TEXT NOT NULL DEFAULT '',  -- "First Last" in Latin letters, if different
+  email       TEXT NOT NULL DEFAULT '',
+  audit_ratio REAL,
+  event_id    INTEGER,                   -- the current event (platform.current)
+  level       INTEGER NOT NULL DEFAULT 0, -- in the current event
+  xp          INTEGER NOT NULL DEFAULT 0, -- in the current event
+  synced_at   INTEGER NOT NULL
+);
+CREATE INDEX platform_users_login ON platform_users(lower(login));
+CREATE TABLE platform_events (
+  id        INTEGER PRIMARY KEY,
+  path      TEXT NOT NULL,
+  parent_id INTEGER,
+  start_at  INTEGER,
+  end_at    INTEGER
+);
+CREATE TABLE platform_user_events (
+  user_id  INTEGER NOT NULL,
+  event_id INTEGER NOT NULL,
+  level    INTEGER NOT NULL DEFAULT 0,
+  xp       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, event_id)
+);
+CREATE INDEX platform_user_events_event ON platform_user_events(event_id);
+`,
 }
 
 func (db *DB) migrate(ctx context.Context) error {

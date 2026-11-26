@@ -41,7 +41,7 @@ Usage:
   attendance unlink <student-id> -reason "…" unlink a Telegram account
   attendance replay                          rebuild visits from raw events (stop the service first)
   attendance backup <file>                   write a consistent copy of the database
-  attendance platform sync                   read logins, XP and audit ratios from the learning platform now
+  attendance platform sync                   read the students' levels, XP and audit ratios from the learning platform now
   attendance gen-key                         print a random host key
   attendance version
 
@@ -469,14 +469,14 @@ func platformSync(args []string) error {
 		return err
 	}
 	defer db.Close()
-	s := &platform.Syncer{DB: db, TokenFile: cfg.PlatformTokenPath()}
+	s := &platform.Syncer{DB: db, Base: cfg.PlatformURL, TokenFile: cfg.PlatformTokenPath()}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	res, err := s.Sync(ctx, time.Now(), "cli")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("platform users: %d (with XP: %d)\nstudents linked: %d\nstudents whose login is not on the platform: %d\nstudents without a login: %d\n",
+	fmt.Printf("platform users: %d (with XP in their current event: %d)\nstudents linked: %d\nstudents whose login is not on the platform: %d\nstudents without a login: %d\n",
 		res.Users, res.WithXP, res.Linked, res.UnknownLogins, res.StudentsNoLogin)
 	for _, w := range res.Warnings {
 		fmt.Println("warning:", w)

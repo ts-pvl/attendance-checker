@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,11 +21,11 @@ import (
 	"attendance/internal/store"
 )
 
-// Settings keys. The address and events are set by an admin in the UI; the
-// access token is kept in a file (Syncer.TokenFile), never in the database,
-// so database backups do not carry it.
+// Settings keys. The address is fixed in the configuration (platform_url);
+// the events are set by an admin in the UI; the access token is kept in a
+// file (Syncer.TokenFile), never in the database, so database backups do
+// not carry it.
 const (
-	keyURL       = "platform_url"
 	keyEvents    = "platform_events"
 	keyLastTry   = "platform_last_try"
 	keyLastSync  = "platform_last_sync"
@@ -33,12 +33,14 @@ const (
 	keyResult    = "platform_last_result"
 )
 
+// Settings are what an admin sets in the UI: the events whose participants
+// are all read, besides the students' own logins. They are optional.
 type Settings struct {
-	URL    string
 	Events []int64
 }
 
-func (s Settings) Configured() bool { return s.URL != "" && len(s.Events) > 0 }
+// Has reports whether an event is among them.
+func (s Settings) Has(id int64) bool { return slices.Contains(s.Events, id) }
 
 // EventsText is how the events are shown and typed: "12, 15".
 func (s Settings) EventsText() string {
@@ -50,29 +52,15 @@ func (s Settings) EventsText() string {
 }
 
 var (
-	ErrBadURL    = errors.New("the platform address must look like https://01.example.org")
-	ErrBadEvents = errors.New("events are numbers separated by commas, at most 20")
-	ErrBadToken  = errors.New("the access token looks wrong: paste it exactly as the platform shows it")
-	ErrBusy      = errors.New("a sync is already running")
-	ErrNoToken   = errors.New("no access token has been saved")
-	ErrNotSetUp  = errors.New("the platform address and events are not set")
+	ErrBadEvents     = errors.New("events are numbers separated by commas, at most 20")
+	ErrBadToken      = errors.New("the access token looks wrong: paste it exactly as the platform shows it")
+	ErrBusy          = errors.New("a sync is already running")
+	ErrNoToken       = errors.New("no access token has been saved")
+	ErrNoPlatform    = errors.New("platform_url is empty in the configuration")
+	ErrNothingToRead = errors.New("no student has a platform login and no event is set")
 )
 
-// CleanURL keeps the scheme and host of an https address.
-func CleanURL(s string) (string, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return "", nil
-	}
-	if !strings.Contains(s, "://") {
-		s = "https://" + s
-	}
-	u, err := url.Parse(s)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || strings.ContainsAny(u.Host, " /\\") {
-		return "", ErrBadURL
-	}
-	return "https://" + strings.ToLower(u.Host), nil
-}
+const maxEvents = 20
 
 // ParseEvents reads "12, 15" (commas or spaces) into sorted distinct ids.
 func ParseEvents(s string) ([]int64, error) {
@@ -88,7 +76,7 @@ func ParseEvents(s string) ([]int64, error) {
 			out = append(out, n)
 		}
 	}
-	if len(out) > 20 {
+	if len(out) > maxEvents {
 		return nil, ErrBadEvents
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
@@ -96,22 +84,18 @@ func ParseEvents(s string) ([]int64, error) {
 }
 
 func LoadSettings(ctx context.Context, q store.Querier) (Settings, error) {
-	u, err := store.GetSetting(ctx, q, keyURL)
-	if err != nil {
-		return Settings{}, err
-	}
 	e, err := store.GetSetting(ctx, q, keyEvents)
 	if err != nil {
 		return Settings{}, err
 	}
 	events, _ := ParseEvents(e)
-	return Settings{URL: u, Events: events}, nil
+	return Settings{Events: events}, nil
 }
 
 // Result is what one sync did, shown on the Platform page.
 type Result struct {
 	Users           int      `json:"users"`
-	WithXP          int      `json:"with_xp"`
+	WithXP          int      `json:"with_xp"`        // users with XP in their current event
 	Linked          int      `json:"linked"`         // students whose login is a platform user
 	UnknownLogins   int      `json:"unknown_logins"` // students whose login is not among them
 	StudentsNoLogin int      `json:"students_no_login"`
@@ -147,6 +131,7 @@ func LoadStatus(ctx context.Context, q store.Querier) (Status, error) {
 // Syncer runs syncs one at a time: on a schedule (app) and on demand (web, CLI).
 type Syncer struct {
 	DB        *store.DB
+	Base      string // the platform, from platform_url; "": none
 	TokenFile string
 	HTTP      *http.Client // nil: a client with a 60 s timeout
 	Log       *slog.Logger
@@ -178,12 +163,11 @@ func (s *Syncer) SaveToken(token string) error {
 	return os.Rename(tmp, s.TokenFile)
 }
 
-// SaveSettings stores the address and events, and the token if one is given.
-func (s *Syncer) SaveSettings(ctx context.Context, now time.Time, rawURL, rawEvents, token, actor string) error {
-	u, err := CleanURL(rawURL)
-	if err != nil {
-		return err
-	}
+// Ready reports whether a sync can run: there is a platform and a token.
+func (s *Syncer) Ready() bool { return s.Base != "" && s.HasToken() }
+
+// SaveSettings stores the events, and the token if one is given.
+func (s *Syncer) SaveSettings(ctx context.Context, now time.Time, rawEvents, token, actor string) error {
 	events, err := ParseEvents(rawEvents)
 	if err != nil {
 		return err
@@ -193,16 +177,36 @@ func (s *Syncer) SaveSettings(ctx context.Context, now time.Time, rawURL, rawEve
 			return err
 		}
 	}
-	st := Settings{URL: u, Events: events}
+	return s.saveEvents(ctx, now, Settings{Events: events}, token != "", actor)
+}
+
+// SetEvent adds an event to the settings or takes it out.
+func (s *Syncer) SetEvent(ctx context.Context, now time.Time, id int64, on bool, actor string) error {
+	set, err := LoadSettings(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	if id <= 0 {
+		return ErrBadEvents
+	}
+	events := slices.DeleteFunc(slices.Clone(set.Events), func(e int64) bool { return e == id })
+	if on {
+		events = append(events, id)
+		slices.Sort(events)
+	}
+	if len(events) > maxEvents {
+		return ErrBadEvents
+	}
+	return s.saveEvents(ctx, now, Settings{Events: events}, false, actor)
+}
+
+func (s *Syncer) saveEvents(ctx context.Context, now time.Time, set Settings, newToken bool, actor string) error {
 	return s.DB.InTx(ctx, func(tx *sql.Tx) error {
-		if err := store.SetSetting(ctx, tx, keyURL, st.URL); err != nil {
+		if err := store.SetSetting(ctx, tx, keyEvents, set.EventsText()); err != nil {
 			return err
 		}
-		if err := store.SetSetting(ctx, tx, keyEvents, st.EventsText()); err != nil {
-			return err
-		}
-		details := fmt.Sprintf("address %q, events %q", st.URL, st.EventsText())
-		if token != "" {
+		details := fmt.Sprintf("events %q", set.EventsText())
+		if newToken {
 			details += ", new access token"
 		}
 		return store.Audit(ctx, tx, now, actor, "platform_settings", "", details)
@@ -211,11 +215,7 @@ func (s *Syncer) SaveSettings(ctx context.Context, now time.Time, rawURL, rawEve
 
 // Due reports whether a scheduled sync should run now.
 func (s *Syncer) Due(ctx context.Context, now time.Time, every time.Duration) bool {
-	if every <= 0 {
-		return false
-	}
-	set, err := LoadSettings(ctx, s.DB)
-	if err != nil || !set.Configured() || !s.HasToken() {
+	if every <= 0 || !s.Ready() {
 		return false
 	}
 	st, err := LoadStatus(ctx, s.DB)
@@ -229,19 +229,27 @@ func (s *Syncer) Sync(ctx context.Context, now time.Time, actor string) (Result,
 		return Result{}, ErrBusy
 	}
 	defer s.mu.Unlock()
+	if s.Base == "" {
+		return Result{}, ErrNoPlatform
+	}
 	set, err := LoadSettings(ctx, s.DB)
 	if err != nil {
 		return Result{}, err
-	}
-	if !set.Configured() {
-		return Result{}, ErrNotSetUp
 	}
 	token, err := os.ReadFile(s.TokenFile)
 	if err != nil || strings.TrimSpace(string(token)) == "" {
 		return Result{}, ErrNoToken
 	}
-	c := &Client{Base: set.URL, Token: strings.TrimSpace(string(token)), HTTP: s.HTTP}
-	users, warnings, err := c.Fetch(ctx, set.Events)
+	logins, err := studentLogins(ctx, s.DB)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(logins) == 0 && len(set.Events) == 0 {
+		s.record(now, Result{}, ErrNothingToRead)
+		return Result{}, ErrNothingToRead
+	}
+	c := &Client{Base: s.Base, Token: strings.TrimSpace(string(token)), HTTP: s.HTTP}
+	data, warnings, err := c.Fetch(ctx, Request{Logins: logins, Events: set.Events})
 	if err != nil {
 		err = errors.New(c.redact(err.Error())) // belt and braces: never store the token
 		s.record(now, Result{}, err)
@@ -250,7 +258,7 @@ func (s *Syncer) Sync(ctx context.Context, now time.Time, actor string) (Result,
 		}
 		return Result{}, err
 	}
-	res, err := Store(ctx, s.DB, now, users)
+	res, err := Store(ctx, s.DB, now, data)
 	if err != nil {
 		return Result{}, err
 	}
@@ -279,25 +287,66 @@ func (s *Syncer) record(now time.Time, res Result, failure error) {
 	store.SetSetting(ctx, s.DB, keyResult, string(b))
 }
 
-// Store replaces the stored platform users and counts the links.
-func Store(ctx context.Context, db *store.DB, now time.Time, users []User) (Result, error) {
+// studentLogins are the logins of the students who have not left.
+func studentLogins(ctx context.Context, q store.Querier) ([]string, error) {
+	rows, err := q.QueryContext(ctx, "SELECT login FROM students WHERE login <> '' AND archived = 0 ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var l string
+		if err := rows.Scan(&l); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+func nullMs(t time.Time) sql.NullInt64 {
+	if t.IsZero() {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: store.Ms(t), Valid: true}
+}
+
+// Store replaces what the last sync stored and counts the links.
+func Store(ctx context.Context, db *store.DB, now time.Time, d Data) (Result, error) {
 	var res Result
 	err := db.InTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, "DELETE FROM platform_users"); err != nil {
-			return err
-		}
-		for _, u := range users {
-			ev := make([]string, len(u.Events))
-			for i, e := range u.Events {
-				ev[i] = strconv.FormatInt(e, 10)
+		for _, t := range []string{"platform_users", "platform_events", "platform_user_events"} {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+				return err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO platform_users(id, login, first_name, last_name, email, xp, audit_ratio, events, synced_at)
-				VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`, u.ID, u.Login, u.FirstName, u.LastName, u.Email, u.XP,
-				sql.NullFloat64{Float64: u.AuditRatio, Valid: u.HasAuditRatio}, strings.Join(ev, ","), store.Ms(now)); err != nil {
+		}
+		for _, e := range d.Events {
+			parent := sql.NullInt64{Int64: e.ParentID, Valid: e.ParentID != 0}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO platform_events(id, path, parent_id, start_at, end_at) VALUES(?, ?, ?, ?, ?)",
+				e.ID, e.Path, parent, nullMs(e.Start), nullMs(e.End)); err != nil {
+				return err
+			}
+		}
+		for _, u := range d.Users {
+			var cur EventStat
+			for _, e := range u.Events {
+				if _, err := tx.ExecContext(ctx, "INSERT INTO platform_user_events(user_id, event_id, level, xp) VALUES(?, ?, ?, ?)",
+					u.ID, e.EventID, e.Level, e.XP); err != nil {
+					return err
+				}
+				if e.EventID == u.Current {
+					cur = e
+				}
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO platform_users(id, login, first_name, last_name, other_name, email, audit_ratio, event_id, level, xp, synced_at)
+				VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, u.ID, u.Login, u.FirstName, u.LastName, u.OtherName, u.Email,
+				sql.NullFloat64{Float64: u.AuditRatio, Valid: u.HasAuditRatio}, sql.NullInt64{Int64: u.Current, Valid: u.Current != 0},
+				cur.Level, cur.XP, store.Ms(now)); err != nil {
 				return err
 			}
 			res.Users++
-			if u.XP != 0 {
+			if cur.XP != 0 {
 				res.WithXP++
 			}
 		}
@@ -325,8 +374,8 @@ func nameWords(s string) []string {
 }
 
 // LinkByName gives logins to students who have none, where a platform
-// user's first and last name are both among the words of exactly one such
-// student's name, that student matches no other platform user, and the
+// user's first and last name (in Cyrillic, or in Latin letters) are both
+// among the words of exactly one such student's name, that student matches no other platform user, and the
 // login is not already a student's. Each link is journaled.
 func LinkByName(ctx context.Context, db *store.DB, now time.Time, actor string) ([]NameLink, error) {
 	type person struct {
@@ -357,39 +406,47 @@ func LinkByName(ctx context.Context, db *store.DB, now time.Time, actor string) 
 	}
 	type puser struct {
 		login string
-		words []string
+		names [][]string // the words of each of the user's names
 	}
 	var users []puser
-	rows, err = db.QueryContext(ctx, `SELECT p.login, p.first_name, p.last_name FROM platform_users p
+	rows, err = db.QueryContext(ctx, `SELECT p.login, p.first_name, p.last_name, p.other_name FROM platform_users p
 		WHERE NOT EXISTS (SELECT 1 FROM students s WHERE lower(s.login) = lower(p.login) AND s.login <> '') ORDER BY p.id`)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var u puser
-		var first, last string
-		if err := rows.Scan(&u.login, &first, &last); err != nil {
+		var first, last, other string
+		if err := rows.Scan(&u.login, &first, &last, &other); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		fw, lw := nameWords(first), nameWords(last)
-		if len(fw) == 0 || len(lw) == 0 {
-			continue // both names are needed
+		if len(fw) > 0 && len(lw) > 0 { // both names are needed
+			u.names = append(u.names, append(fw, lw...))
 		}
-		u.words = append(fw, lw...)
-		users = append(users, u)
+		if ow := nameWords(other); len(ow) >= 2 { // "First Last" in Latin letters
+			u.names = append(u.names, ow)
+		}
+		if len(u.names) > 0 {
+			users = append(users, u)
+		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	matches := func(p person, u puser) bool {
-		for _, w := range u.words {
-			if !p.words[w] {
-				return false
+	names:
+		for _, words := range u.names {
+			for _, w := range words {
+				if !p.words[w] {
+					continue names
+				}
 			}
+			return true
 		}
-		return true
+		return false
 	}
 	byStudent := map[int64][]int{} // student -> users matching
 	byUser := map[int][]int64{}    // user -> students matching

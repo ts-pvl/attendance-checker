@@ -2,7 +2,7 @@
 {{$admin := false}}{{with $.Staff}}{{$admin = .IsAdmin}}{{end}}
 {{with .D}}
 <h1>{{t "plat.title"}}</h1>
-<p class="sub">{{t "plat.intro"}}</p>
+<p class="sub">{{t "plat.intro"}}{{if .URL}} <span class="mono">{{.URL}}</span>{{end}}</p>
 
 <section class="card">
   <div class="c-head"><h2>{{t "plat.status"}}</h2>
@@ -10,7 +10,7 @@
     <div class="tools">
       <form method="post" action="/admin/platform/sync">
         <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{.Self}}">
-        <button class="btn primary" {{if not (and .Settings.Configured .HasToken)}}disabled{{end}}>{{t "plat.sync_now"}}</button>
+        <button class="btn primary" {{if not (and .URL .HasToken)}}disabled{{end}}>{{t "plat.sync_now"}}</button>
       </form>
       <form method="post" action="/admin/platform/link" data-confirm="{{t "plat.link_confirm"}}">
         <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{.Self}}">
@@ -19,9 +19,10 @@
     </div>
     {{end}}
   </div>
-  {{if not .Settings.Configured}}<p class="muted">{{t "plat.not_set_up"}}</p>
+  {{if not .URL}}<p class="flash err">{{t "plat.no_platform"}}</p>
+  {{else if not .HasToken}}<p class="muted">{{t "plat.need_token"}}</p>
   {{else}}
-  <p>{{.Settings.URL}} · {{t "plat.events_are" .Settings.EventsText}} · {{if .HasToken}}{{t "plat.token_saved"}}{{else}}<span class="pill warn">{{t "plat.no_token"}}</span>{{end}}</p>
+  <p>{{t "plat.token_saved"}} · {{if .Settings.Events}}{{t "plat.events_are" .Settings.EventsText}}{{else}}{{t "plat.logins_only"}}{{end}}</p>
   <p>{{if .Status.LastSync.IsZero}}{{t "plat.never"}}{{else}}{{t "plat.last_sync" (dt .Status.LastSync) (ago .Status.LastSync)}}
     {{with .Status.Result}}· {{t "plat.result" .Users .Linked .UnknownLogins .StudentsNoLogin}}{{end}}{{end}}
     {{if gt .SyncEvery 0}}<span class="muted">· {{t "plat.every" (dur .SyncEvery)}}</span>{{end}}</p>
@@ -29,11 +30,10 @@
   {{range .Status.Result.Warnings}}<p class="pill warn">{{.}}</p>{{end}}
   {{end}}
   {{if $admin}}
-  <details {{if not .Settings.Configured}}open{{end}}>
+  <details {{if and .URL (not .HasToken)}}open{{end}}>
     <summary>{{t "plat.settings"}}</summary>
     <form method="post" action="/admin/platform/settings" class="stack" autocomplete="off">
       <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{.Self}}">
-      <label>{{t "plat.url"}} <input name="url" value="{{.Settings.URL}}" placeholder="https://01.example.org"></label>
       <label>{{t "plat.events"}} <input name="events" value="{{.Settings.EventsText}}" placeholder="12, 15"></label>
       <label>{{t "plat.token"}} <input type="password" name="token" placeholder="{{if .HasToken}}{{t "plat.token_keep"}}{{end}}" autocomplete="new-password"></label>
       <p class="muted hint">{{t "plat.token_hint"}}</p>
@@ -42,6 +42,36 @@
   </details>
   {{end}}
 </section>
+
+{{if .Events}}
+<section class="card">
+  <div class="c-head"><h2>{{t "plat.events_title"}} <span class="count">{{len .Events}}</span></h2></div>
+  <p class="muted hint">{{t "plat.events_intro"}}</p>
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr><th>{{t "plat.col_event"}}</th><th>{{t "plat.col_number"}}</th><th>{{t "plat.col_dates"}}</th><th class="num">{{t "plat.col_ours"}}</th><th class="num">{{t "plat.col_read"}}</th>{{if $admin}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range .Events}}
+    <tr>
+      <td>{{if .Path}}<span class="mono">{{.Name}}</span>{{else}}<span class="muted">{{t "plat.event_unknown"}}</span>{{end}}{{if .Loading}} <span class="pill">{{t "plat.loading"}}</span>{{end}}</td>
+      <td class="mono">{{.ID}}</td>
+      <td>{{if not .Start.IsZero}}{{date .Start}}{{if not .End.IsZero}} – {{date .End}}{{end}}{{end}}</td>
+      <td class="num">{{.Students}}</td>
+      <td class="num">{{.Users}}</td>
+      {{if $admin}}<td>
+        <form method="post" action="/admin/platform/event">
+          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$.D.Self}}">
+          <input type="hidden" name="event" value="{{.ID}}"><input type="hidden" name="load" value="{{if .Loading}}0{{else}}1{{end}}">
+          <button class="btn">{{if .Loading}}{{t "plat.load_stop"}}{{else}}{{t "plat.load_all"}}{{end}}</button>
+        </form>
+      </td>{{end}}
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+{{end}}
 
 <section class="card">
   <div class="c-head">
@@ -65,8 +95,10 @@
     {{range .Rows}}
     <tr>
       <td class="mono">{{.Login}}</td>
-      <td>{{.Name}}</td>
-      <td class="num">{{.XP}}</td>
+      <td>{{.Name}}{{with .OtherName}} <small class="muted">{{.}}</small>{{end}}</td>
+      <td>{{if .Event.ID}}<span class="mono">{{.Event.Name}}</span>{{if not .Event.Start.IsZero}} <small class="muted">{{date .Event.Start}}</small>{{end}}{{else}}—{{end}}</td>
+      <td class="num">{{if .Event.ID}}{{.Level}}{{else}}—{{end}}</td>
+      <td class="num" title="{{.XP}}">{{xp .XP}}</td>
       <td class="num">{{if .HasAudit}}{{printf "%.2f" .Audit}}{{else}}—{{end}}</td>
       <td>{{if .StudentID}}<a class="name" href="/admin/new/students/{{.StudentID}}">{{.Student}}</a> <small class="muted">{{.Group}}</small>{{else}}<span class="pill">{{t "plat.unlinked"}}</span>{{end}}</td>
     </tr>
