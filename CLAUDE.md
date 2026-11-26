@@ -16,7 +16,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * **Server clock only.** Never use a time sent by a PC or a phone. Agents send idle durations, not timestamps.
 * **Raw events first.** Every input goes into `events` before it changes state, and all state changes go through `core.Engine.apply`. Replaying the events must reproduce sessions and presence exactly (`TestReplayReproducesState`).
 * **Corrections never modify `presence`.** They are separate audited rows layered on top by `hours.Apply`.
-* **One query for hours.** The Hours screen, CSV export, student page and bot all use `hours.Load` + `Calc.Summarize`.
+* **One query for hours.** The Hours tab, CSV export, student page and bot all use `hours.Load` + `Calc.Summarize`.
 * **Hours and token rules: tests first.** Expected values in tests are computed by hand from the scenario, never by calling the code under test. When changing a rule, break it on purpose and check that a test fails.
 * Every user-visible string lives in `internal/i18n` in both English and Russian.
 * Never log or paste the bot token, host key, token secret or real student data. Use a separate test bot and fake data.
@@ -25,7 +25,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 * **Platform data:** read only what is needed. A user's `attrs` holds ID numbers, addresses, phones and medical notes: ask only for single name paths (`attrs(path: "firstNameCyr")`), never for `attrs` as a whole; the fake platform in the tests fails such a query. Ids and logins go in GraphQL variables, never in the query text. Tests never reach the real platform: they set `platform_url` to "" or to a fake server.
 * **Peer-help rules: tests first**, like hours: the resolving and counting rules are documented in `internal/help/help.go`, and the tests use invented logins only. Never commit a real form export.
 * **Browser storage** is for small conveniences only, never for data: `localStorage` holds the light/dark theme, `sessionStorage` the dashboard dates for one browser tab (cleared on reload). Shared settings, such as the Today grid layout, go in the `settings` table and the journal.
-* **Two admin UIs** live side by side: the old pages (`layout.html`) and the new one (`nlayout.html`: `/admin/dashboard`, `/admin/new/*`, with the tabs Dashboard, Today, Students, Anomalies, Peer help, Platform and Journal). Both post to the same handlers, so a change to an action must keep both working. Lists in the new UI are paged on the server (`pager.go`).
+* **One admin UI** (`layout.html`), with the tabs Dashboard, Today, Hours, Students, Anomalies, Peer help, Platform and Journal under `/admin/*`. Actions return to the page they came from through a `return` field. Lists are paged on the server (`pager.go`). The former second UI's addresses (`/admin/new/*`, `/admin/audit`, `/admin/ui/*`) only redirect.
 * `admin_ansible/` is a copy of the school's real Ansible inventory, for reference only. Never commit it.
 * The lab PCs boot with overlayroot. The agent role writes to the lower disk by remounting it; do not copy files through `overlayroot-chroot` (see `docs/decisions.md`).
 * User-facing docs come in English, Russian and Kazakh: `README.md`, `README.ru.md`, `README.kk.md`, and the staff runbook and student instructions in `docs/` (`.md`/`.en.md`, `.ru.md`, `.kk.md`). Update all three together and keep them simple: the readers run a school, not a codebase. `docs/development.md` and `docs/decisions.md` are English only.
@@ -39,7 +39,7 @@ PDF in the repository root; choices not in the spec are in `docs/decisions.md`.
 
 ## Commands
 
-`make test`, `make race`, `make check` (vet, staticcheck, govulncheck, gosec, shellcheck, race), `make pi`.
+`make test`, `make race`, `make smoke` (start the real binary and use it), `make check` (what CI runs: vet, staticcheck, shellcheck, race, smoke), `make vuln` (informational in CI), `make pi`.
 
 `make dev` runs everything locally in `.dev/` (it adapts to WSL and seeds invented data with `cmd/devseed`, which refuses any database outside `.dev/`).
 

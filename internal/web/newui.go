@@ -1,8 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/csv"
 	"errors"
 	"net/http"
 	"net/url"
@@ -18,9 +20,9 @@ import (
 	"attendance/internal/store"
 )
 
-// The Students, Anomalies and Journal tabs of the new admin UI. Actions
-// (import, codes, corrections…) post to the same endpoints as the old UI,
-// with a "return" field that brings the browser back here.
+// The Students, Anomalies and Journal tabs of the admin UI. Actions (import,
+// codes, corrections…) carry a "return" field that brings the browser back
+// to the page they were sent from.
 
 // ---------- Students ----------
 
@@ -57,24 +59,121 @@ func linkRank(r *studentRow) int {
 }
 
 type nStudentsData struct {
-	studentsData
-	Sort, Dir string
-	Heads     []tableHead
-	Pager     pager
-	PerOpts   []perOption
-	Return    string // this page, for the actions' "return" field
+	studentsOpts
+	Rows                              []studentRow // this page
+	Groups                            []string
+	Total, Linked, Pending, NotLinked int // the group (or archive), before the search and the Telegram filter
+	Heads                             []tableHead
+	Pager                             pager
+	PerOpts                           []perOption
+	CSV                               string // export link: the current filters and order, every row
+	Return                            string // this page, for the actions' "return" field
 }
 
-func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
+// studentsOpts are the filters and order of the students list. The CSV
+// export takes the same ones.
+type studentsOpts struct {
+	Group     string
+	Archived  bool
+	Q         string // part of a name or a login
+	TG        string // "linked", "unlinked" (no Telegram account yet) or "" (everyone)
+	Sort, Dir string
+}
+
+func parseStudentsOpts(q url.Values) studentsOpts {
+	o := studentsOpts{Group: q.Get("group"), Archived: q.Get("archived") == "1", Q: strings.TrimSpace(q.Get("q")),
+		TG: q.Get("tg"), Sort: q.Get("sort"), Dir: q.Get("dir")}
+	if r := []rune(o.Q); len(r) > 100 {
+		o.Q = string(r[:100])
+	}
+	if o.TG != "linked" && o.TG != "unlinked" {
+		o.TG = ""
+	}
+	if _, ok := studentSorts[o.Sort]; !ok {
+		o.Sort = "group" // default as before: group, then name
+	}
+	if o.Dir != "desc" {
+		o.Dir = "asc"
+	}
+	return o
+}
+
+// query: the filters (not the order) as URL parameters, defaults left out.
+func (o studentsOpts) query() url.Values {
+	v := url.Values{}
+	if o.Group != "" {
+		v.Set("group", o.Group)
+	}
+	if o.Archived {
+		v.Set("archived", "1")
+	}
+	if o.Q != "" {
+		v.Set("q", o.Q)
+	}
+	if o.TG != "" {
+		v.Set("tg", o.TG)
+	}
+	return v
+}
+
+// nameMatches reports whether every word of the search is part of the
+// student's name or login. Names are compared as core.NameWords folds them
+// (case, ё/е, Kazakh letters, Latin look-alikes), so "нурлан" finds "Нұрлан".
+func nameMatches(st *studentRow, search string) bool {
+	if search == "" {
+		return true
+	}
+	name := strings.Join(core.NameWords(st.Name), " ")
+	login := strings.ToLower(st.Login)
+	for _, w := range core.NameWords(search) {
+		if !strings.Contains(name, w) && !strings.Contains(login, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// studentList loads the students of the group and archive filter (all is
+// what the summary counts) and returns those that also match the search and
+// the Telegram filter, in order.
+func (s *Server) studentList(ctx context.Context, o studentsOpts) (all []studentRow, shown []*studentRow, err error) {
+	where, args := "s.archived = ?", []any{o.Archived}
+	if o.Group != "" {
+		where += " AND s.grp = ?"
+		args = append(args, o.Group)
+	}
+	if all, err = s.studentRows(ctx, where, args...); err != nil {
+		return nil, nil, err
+	}
+	for i := range all {
+		sr := &all[i]
+		if o.TG == "linked" && !sr.Linked || o.TG == "unlinked" && sr.Linked || !nameMatches(sr, o.Q) {
+			continue
+		}
+		shown = append(shown, sr)
+	}
+	by := studentSorts[o.Sort]
+	slices.SortStableFunc(shown, func(a, b *studentRow) int {
+		c := by(a, b)
+		if o.Dir == "desc" {
+			c = -c
+		}
+		if c == 0 {
+			if c = compareNames(a.Group, b.Group); c == 0 {
+				c = compareNames(a.Name, b.Name)
+			}
+		}
+		return c
+	})
+	return all, shown, nil
+}
+
+func (s *Server) handleStudents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	d := &nStudentsData{studentsData: studentsData{Group: q.Get("group"), Archived: q.Get("archived") == "1"}, Return: r.URL.RequestURI()}
-	where, args := "s.archived = ?", []any{d.Archived}
-	if d.Group != "" {
-		where += " AND s.grp = ?"
-		args = append(args, d.Group)
-	}
-	all, err := s.studentRows(ctx, where, args...)
+	o := parseStudentsOpts(q)
+	d := &nStudentsData{studentsOpts: o, Return: r.URL.RequestURI()}
+	all, rows, err := s.studentList(ctx, o)
 	if err != nil {
 		s.serverError(w, err)
 		return
@@ -95,41 +194,9 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Sort (default as before: group, then name), then one page.
-	d.Sort, d.Dir = q.Get("sort"), q.Get("dir")
-	if _, ok := studentSorts[d.Sort]; !ok {
-		d.Sort = "group"
-	}
-	if d.Dir != "desc" {
-		d.Dir = "asc"
-	}
-	rows := make([]*studentRow, len(all))
-	for i := range all {
-		rows[i] = &all[i]
-	}
-	by := studentSorts[d.Sort]
-	slices.SortStableFunc(rows, func(a, b *studentRow) int {
-		c := by(a, b)
-		if d.Dir == "desc" {
-			c = -c
-		}
-		if c == 0 {
-			if c = compareNames(a.Group, b.Group); c == 0 {
-				c = compareNames(a.Name, b.Name)
-			}
-		}
-		return c
-	})
 	per := parsePer(q.Get("per"), defaultStudentsPer)
-	base := url.Values{}
-	if d.Group != "" {
-		base.Set("group", d.Group)
-	}
-	if d.Archived {
-		base.Set("archived", "1")
-	}
 	link := func(sortKey, dir string, page int) string {
-		v := cloneValues(base)
+		v := o.query()
 		v.Set("sort", sortKey)
 		v.Set("dir", dir)
 		if per != defaultStudentsPer {
@@ -138,9 +205,9 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 		if page > 1 {
 			v.Set("page", strconv.Itoa(page))
 		}
-		return "/admin/new/students?" + v.Encode()
+		return "/admin/students?" + v.Encode()
 	}
-	pg, lo, hi := paginate(len(rows), parsePage(q.Get("page")), per, func(p int) string { return link(d.Sort, d.Dir, p) })
+	pg, lo, hi := paginate(len(rows), parsePage(q.Get("page")), per, func(p int) string { return link(o.Sort, o.Dir, p) })
 	d.Pager = pg
 	for _, sr := range rows[lo:hi] {
 		d.Rows = append(d.Rows, *sr)
@@ -148,15 +215,55 @@ func (s *Server) handleNewStudents(w http.ResponseWriter, r *http.Request) {
 	d.PerOpts = perChoices(per, studentsPerOptions, s.t("dash.per_all"))
 	for _, h := range []struct{ key, label string }{{"name", "c.name"}, {"group", "c.group"}, {"login", "plat.col_login"}, {"status", "students.status"}} {
 		head := tableHead{Key: h.key, Label: s.t(h.label), URL: link(h.key, "asc", 1)}
-		if d.Sort == h.key {
+		if o.Sort == h.key {
 			head.Sort, head.URL = "ascending", link(h.key, "desc", 1)
-			if d.Dir == "desc" {
+			if o.Dir == "desc" {
 				head.Sort, head.URL = "descending", link(h.key, "asc", 1)
 			}
 		}
 		d.Heads = append(d.Heads, head)
 	}
-	s.render(w, r, http.StatusOK, "nstudents", d)
+	csvq := o.query()
+	csvq.Set("sort", o.Sort)
+	csvq.Set("dir", o.Dir)
+	d.CSV = "/admin/students.csv?" + csvq.Encode()
+	s.render(w, r, http.StatusOK, "students", d)
+}
+
+// handleStudentsCSV exports the students list as it is filtered and sorted
+// on the page, every row: name, group, platform login and Telegram. The
+// Telegram column has the @username, or for an account without a username
+// its display name; it is empty for a student who has not linked Telegram.
+func (s *Server) handleStudentsCSV(w http.ResponseWriter, r *http.Request) {
+	_, rows, err := s.studentList(r.Context(), parseStudentsOpts(r.URL.Query()))
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	var buf bytes.Buffer
+	buf.WriteString("\xef\xbb\xbf") // BOM so Excel opens UTF-8 (Cyrillic names) correctly
+	cw := csv.NewWriter(&buf)
+	cw.Write([]string{"name", "group", "login", "telegram"})
+	for _, sr := range rows {
+		tg := ""
+		switch {
+		case sr.Linked && sr.TGUsername != "":
+			tg = "@" + sr.TGUsername
+		case sr.Linked:
+			tg = sr.TGName
+		}
+		cw.Write([]string{sr.Name, sr.Group, sr.Login, tg})
+	}
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		s.serverError(w, err)
+		return
+	}
+	name := "students-" + s.Now().In(s.Cfg.Timezone).Format("2006-01-02") + ".csv"
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(buf.Bytes())
 }
 
 type nStudentData struct {
@@ -178,7 +285,7 @@ type helpWeek struct {
 	N    int
 }
 
-func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStudent(w http.ResponseWriter, r *http.Request) {
 	d, err := s.studentPage(r)
 	switch {
 	case errors.Is(err, errNotFound):
@@ -220,17 +327,17 @@ func (s *Server) handleNewStudent(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		s.render(w, r, http.StatusOK, "nstudent", nd)
+		s.render(w, r, http.StatusOK, "student", nd)
 	}
 }
 
-func (s *Server) handleNewSlips(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSlips(w http.ResponseWriter, r *http.Request) {
 	slips, err := s.slips(r)
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "nslips", slips)
+	s.render(w, r, http.StatusOK, "slips", slips)
 }
 
 // ---------- Anomalies ----------
@@ -257,16 +364,17 @@ type nAnomData struct {
 	Gap, LongVisit time.Duration
 	Latency        time.Duration
 	Low, Long, Old []anomVisit
-	Multi          []anomVisit
+	Multi          []anomVisit // visits with two or three flags
+	Scans          *scanAnoms  // several PCs, several students, auto-closed, failed scans
 }
 
-func (s *Server) handleNewAnomalies(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAnomalies(w http.ResponseWriter, r *http.Request) {
 	d, err := s.newAnomalies(r)
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "nanomalies", d)
+	s.render(w, r, http.StatusOK, "anomalies", d)
 }
 
 // newAnomalies flags the visits whose check-in falls in the period (default
@@ -344,6 +452,9 @@ func (s *Server) newAnomalies(r *http.Request) (*nAnomData, error) {
 	newestFirst := func(x, y anomVisit) int { return y.Scan.Compare(x.Scan) }
 	for _, l := range [][]anomVisit{d.Low, d.Long, d.Old, d.Multi} {
 		slices.SortStableFunc(l, newestFirst)
+	}
+	if d.Scans, err = s.scanAnomalies(ctx, from, to); err != nil {
+		return nil, err
 	}
 	return d, nil
 }
@@ -428,8 +539,8 @@ type nJournalData struct {
 	PerOpts []perOption
 }
 
-// handleNewJournal pages the audit log in SQL (newest first).
-func (s *Server) handleNewJournal(w http.ResponseWriter, r *http.Request) {
+// handleJournal pages the audit log in SQL (newest first).
+func (s *Server) handleJournal(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 	var total int
@@ -447,9 +558,9 @@ func (s *Server) handleNewJournal(w http.ResponseWriter, r *http.Request) {
 			v.Set("page", strconv.Itoa(p))
 		}
 		if len(v) == 0 {
-			return "/admin/new/journal"
+			return "/admin/journal"
 		}
-		return "/admin/new/journal?" + v.Encode()
+		return "/admin/journal?" + v.Encode()
 	}
 	pg, lo, hi := paginate(total, parsePage(q.Get("page")), per, link)
 	d := nJournalData{Pager: pg, PerOpts: perChoices(per, journalPerOptions, s.t("dash.per_all"))}
@@ -473,5 +584,5 @@ func (s *Server) handleNewJournal(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "njournal", d)
+	s.render(w, r, http.StatusOK, "journal", d)
 }

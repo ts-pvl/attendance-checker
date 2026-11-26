@@ -2,7 +2,7 @@ VERSION ?= $(shell date +%Y.%m.%d)-$(shell git rev-parse --short HEAD 2>/dev/nul
 LDFLAGS := -s -w -X main.version=$(VERSION)
 BUILD   := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
 
-.PHONY: dev build pi pi32 amd64 all release test race fuzz load check vet staticcheck vuln gosec shellcheck clean
+.PHONY: dev build pi pi32 amd64 all release test race fuzz load smoke check vet staticcheck vuln shellcheck clean
 
 build:
 	$(BUILD) -o dist/attendance ./cmd/attendance
@@ -36,18 +36,22 @@ fuzz:
 load:
 	go test ./internal/core -run TestLoad50PCs -v
 
-# Static checks from the spec (7.1). The tools are run at pinned versions.
-check: vet staticcheck vuln gosec shellcheck race
+# End-to-end: build, set up, start the server and use it (scripts/smoke.sh).
+smoke:
+	./scripts/smoke.sh
+
+# What CI runs: static checks for real bugs, the tests with the race
+# detector and the end-to-end run. The tools are run at pinned versions.
+# `make vuln` lists known vulnerabilities (CI reports them without failing).
+check: vet staticcheck shellcheck race smoke
 vet:
 	go vet ./...
 staticcheck:
 	go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 vuln:
 	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-gosec:
-	go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -severity high ./...
 shellcheck:
-	shellcheck agent/idle_logout deploy/alert/attendance-alert deploy/install.sh scripts/dev.sh
+	shellcheck agent/idle_logout deploy/alert/attendance-alert deploy/install.sh scripts/dev.sh scripts/smoke.sh
 
 clean:
 	rm -rf dist

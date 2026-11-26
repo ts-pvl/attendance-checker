@@ -76,7 +76,7 @@
 <section class="card">
   <div class="c-head">
     <h2>{{t "plat.users"}} <span class="count">{{.Total}}</span></h2>
-    <form class="tools" method="get" action="/admin/new/platform" data-autosubmit>
+    <form class="tools" method="get" action="/admin/platform" data-autosubmit>
       <select name="show" aria-label="{{t "plat.users"}}">
         <option value="">{{t "plat.show_all"}}</option>
         <option value="unlinked" {{if eq .Show "unlinked"}}selected{{end}}>{{t "plat.show_unlinked" .Unlinked}}</option>
@@ -100,7 +100,7 @@
       <td class="num">{{if .Event.ID}}{{.Level}}{{else}}—{{end}}</td>
       <td class="num" title="{{.XP}}">{{xp .XP}}</td>
       <td class="num">{{if .HasAudit}}{{printf "%.2f" .Audit}}{{else}}—{{end}}</td>
-      <td>{{if .StudentID}}<a class="name" href="/admin/new/students/{{.StudentID}}">{{.Student}}</a> <small class="muted">{{.Group}}</small>{{else}}<span class="pill">{{t "plat.unlinked"}}</span>{{end}}</td>
+      <td>{{if .StudentID}}<a class="name" href="/admin/students/{{.StudentID}}">{{.Student}}</a> <small class="muted">{{.Group}}</small>{{else}}<span class="pill">{{t "plat.unlinked"}}</span>{{end}}</td>
     </tr>
     {{end}}
     </tbody>

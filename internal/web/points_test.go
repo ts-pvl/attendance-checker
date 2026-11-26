@@ -44,10 +44,10 @@ func TestPointsWeb(t *testing.T) {
 	}
 
 	// The Today tab: the form for admins only.
-	if b := get(admin, "/admin/new/today"); !strings.Contains(b, `action="/admin/points/present"`) {
+	if b := get(admin, "/admin/today"); !strings.Contains(b, `action="/admin/points/present"`) {
 		t.Error("no points form for the admin")
 	}
-	if b := get(teach, "/admin/new/today"); strings.Contains(b, `action="/admin/points/present"`) || strings.Contains(b, "Social activity points") {
+	if b := get(teach, "/admin/today"); strings.Contains(b, `action="/admin/points/present"`) || strings.Contains(b, "Social activity points") {
 		t.Error("teacher sees the points form or an empty points card")
 	}
 	if w := post(teach, teachCSRF, "/admin/points/present", url.Values{"points": {"5"}, "reason": {"x"}}); w.Code != http.StatusForbidden {
@@ -57,8 +57,8 @@ func TestPointsWeb(t *testing.T) {
 		t.Errorf("bad CSRF token: %d", w.Code)
 	}
 
-	w := post(admin, csrf, "/admin/points/present", url.Values{"points": {"5"}, "reason": {"Cleaned the lab"}, "return": {"/admin/new/today?sort=pc"}})
-	if msg, isErr := flashOf(w); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/new/today?sort=pc" || isErr || msg != "5 points added to each of 1 students." {
+	w := post(admin, csrf, "/admin/points/present", url.Values{"points": {"5"}, "reason": {"Cleaned the lab"}, "return": {"/admin/today?sort=pc"}})
+	if msg, isErr := flashOf(w); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/today?sort=pc" || isErr || msg != "5 points added to each of 1 students." {
 		t.Errorf("award: %d %s %q %v", w.Code, w.Header().Get("Location"), msg, isErr)
 	}
 	for _, f := range []url.Values{{"points": {"0"}, "reason": {"x"}}, {"points": {"abc"}, "reason": {"x"}}, {"points": {"1001"}, "reason": {"x"}}} {
@@ -69,24 +69,24 @@ func TestPointsWeb(t *testing.T) {
 	if msg, isErr := flashOf(post(admin, csrf, "/admin/points/present", url.Values{"points": {"3"}, "reason": {"  "}})); !isErr || msg != "Write what the points are for." {
 		t.Errorf("no reason: %q", msg)
 	}
-	body := get(admin, "/admin/new/today")
+	body := get(admin, "/admin/today")
 	if !strings.Contains(body, "Given to everyone present today") || !strings.Contains(body, "Cleaned the lab") || !strings.Contains(body, `action="/admin/points/batch/1/cancel"`) {
 		t.Error("today's award is not listed with a cancel button")
 	}
 	// Teachers see the list, without the buttons.
-	if b := get(teach, "/admin/new/today"); !strings.Contains(b, "Cleaned the lab") || strings.Contains(b, "/cancel") {
+	if b := get(teach, "/admin/today"); !strings.Contains(b, "Cleaned the lab") || strings.Contains(b, "/cancel") {
 		t.Error("teacher's view of today's awards")
 	}
 
 	// One student: Bob (id 2) gets 3; the student page shows 3 and Alice's page 5.
-	w = post(admin, csrf, "/admin/students/2/points", url.Values{"points": {"3"}, "reason": {"Helped at the open day"}, "return": {"/admin/new/students/2"}})
-	if msg, _ := flashOf(w); w.Header().Get("Location") != "/admin/new/students/2" || msg != "3 points added." {
+	w = post(admin, csrf, "/admin/students/2/points", url.Values{"points": {"3"}, "reason": {"Helped at the open day"}, "return": {"/admin/students/2"}})
+	if msg, _ := flashOf(w); w.Header().Get("Location") != "/admin/students/2" || msg != "3 points added." {
 		t.Errorf("one student: %s %q", w.Header().Get("Location"), msg)
 	}
-	if b := get(admin, "/admin/new/students/2"); !strings.Contains(b, "Total: 3") || !strings.Contains(b, "Helped at the open day") || !strings.Contains(b, `action="/admin/students/2/points"`) {
+	if b := get(admin, "/admin/students/2"); !strings.Contains(b, "Total: 3") || !strings.Contains(b, "Helped at the open day") || !strings.Contains(b, `action="/admin/students/2/points"`) {
 		t.Error("Bob's page")
 	}
-	if b := get(teach, "/admin/new/students/1"); !strings.Contains(b, "Total: 5") || !strings.Contains(b, "everyone present") || strings.Contains(b, `action="/admin/students/1/points"`) {
+	if b := get(teach, "/admin/students/1"); !strings.Contains(b, "Total: 5") || !strings.Contains(b, "everyone present") || strings.Contains(b, `action="/admin/students/1/points"`) {
 		t.Error("Alice's page as a teacher")
 	}
 	if w := post(teach, teachCSRF, "/admin/students/2/points", url.Values{"points": {"3"}, "reason": {"x"}}); w.Code != http.StatusForbidden {
@@ -101,16 +101,16 @@ func TestPointsWeb(t *testing.T) {
 	if msg, isErr := flashOf(post(admin, csrf, "/admin/points/batch/1/cancel", url.Values{})); !isErr || msg != "These points are already cancelled." {
 		t.Errorf("cancel batch again: %q", msg)
 	}
-	if b := get(admin, "/admin/new/students/1"); !strings.Contains(b, "Total: 0") || !strings.Contains(b, "cancelled by boss") {
+	if b := get(admin, "/admin/students/1"); !strings.Contains(b, "Total: 0") || !strings.Contains(b, "cancelled by boss") {
 		t.Error("Alice after the cancel")
 	}
 	var bobEntry string
 	ts.s.DB.QueryRow("SELECT id FROM points WHERE student_id = 2").Scan(&bobEntry)
 	w = post(admin, csrf, "/admin/points/"+bobEntry+"/cancel", url.Values{})
-	if msg, _ := flashOf(w); w.Header().Get("Location") != "/admin/new/students/2" || msg != "The points are cancelled." {
+	if msg, _ := flashOf(w); w.Header().Get("Location") != "/admin/students/2" || msg != "The points are cancelled." {
 		t.Errorf("cancel Bob's entry: %s %q", w.Header().Get("Location"), msg)
 	}
-	if b := get(admin, "/admin/new/today"); !strings.Contains(b, `<span class="pill">cancelled</span>`) {
+	if b := get(admin, "/admin/today"); !strings.Contains(b, `<span class="pill">cancelled</span>`) {
 		t.Error("the cancelled batch is not marked")
 	}
 }

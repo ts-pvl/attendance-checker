@@ -79,7 +79,7 @@ func (s *Server) helpCounts(ctx context.Context) (*help.Matcher, []help.WeekTall
 	return m, tallies, err
 }
 
-func (s *Server) handleNewHelp(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 	_, tallies, err := s.helpCounts(ctx)
@@ -235,7 +235,7 @@ func (s *Server) handleNewHelp(w http.ResponseWriter, r *http.Request) {
 		if page > 1 {
 			v.Set("page", strconv.Itoa(page))
 		}
-		return "/admin/new/help?" + v.Encode()
+		return "/admin/help?" + v.Encode()
 	}
 	pg, lo, hi := paginate(len(list), parsePage(q.Get("page")), per, func(p int) string { return link(d.Sort, d.Dir, p) })
 	d.Pager = pg
@@ -316,7 +316,7 @@ func (s *Server) handleNewHelp(w http.ResponseWriter, r *http.Request) {
 			return cmp.Compare(b.Times, a.Times)
 		})
 	}
-	s.render(w, r, http.StatusOK, "nhelp", d)
+	s.render(w, r, http.StatusOK, "help", d)
 }
 
 // parseDay reads a local date (YYYY-MM-DD) as noon of that day.
@@ -345,24 +345,24 @@ func (s *Server) handleHelpImport(w http.ResponseWriter, r *http.Request) {
 	// The CSRF check has already parsed the form; help.Read stops at 10 MB.
 	f, hdr, err := r.FormFile("file")
 	if err != nil {
-		back(w, r, "/admin/new/help", s.t("help.no_file"), true)
+		back(w, r, "/admin/help", s.t("help.no_file"), true)
 		return
 	}
 	defer f.Close()
 	day, err := s.parseDay(r.PostFormValue("week"))
 	if err != nil {
-		back(w, r, "/admin/new/help", s.helpError(help.ErrBadWeek), true)
+		back(w, r, "/admin/help", s.helpError(help.ErrBadWeek), true)
 		return
 	}
 	week := s.Calc.PeriodAt("week", day).From.Format("2006-01-02")
 	answers, err := help.Read(f, hdr.Filename)
 	if err != nil {
-		back(w, r, "/admin/new/help", s.helpError(err), true)
+		back(w, r, "/admin/help", s.helpError(err), true)
 		return
 	}
 	replaced, err := help.Import(r.Context(), s.DB, s.Now(), week, hdr.Filename, answers, staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/help", s.helpError(err), true)
+		back(w, r, "/admin/help", s.helpError(err), true)
 		return
 	}
 	msg := s.t("help.imported", len(answers), week)
@@ -370,7 +370,7 @@ func (s *Server) handleHelpImport(w http.ResponseWriter, r *http.Request) {
 		msg += " " + s.t("help.replaced")
 	}
 	setFlash(w, msg, false)
-	http.Redirect(w, r, "/admin/new/help?week="+week, http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/help?week="+week, http.StatusSeeOther)
 }
 
 func (s *Server) handleHelpAlias(w http.ResponseWriter, r *http.Request) {
@@ -381,17 +381,17 @@ func (s *Server) handleHelpAlias(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := help.SetAlias(ctx, s.DB, m, s.Now(), r.PostFormValue("typed"), r.PostFormValue("login"), staffFrom(r).Username); err != nil {
-		back(w, r, "/admin/new/help", s.helpError(err), true)
+		back(w, r, "/admin/help", s.helpError(err), true)
 		return
 	}
-	back(w, r, "/admin/new/help", s.t("help.alias_saved"), false)
+	back(w, r, "/admin/help", s.t("help.alias_saved"), false)
 }
 
 func (s *Server) handleHelpDelete(w http.ResponseWriter, r *http.Request) {
 	if err := help.Delete(r.Context(), s.DB, s.Now(), r.PostFormValue("week"), staffFrom(r).Username); err != nil {
-		back(w, r, "/admin/new/help", s.helpError(err), true)
+		back(w, r, "/admin/help", s.helpError(err), true)
 		return
 	}
 	setFlash(w, s.t("help.deleted"), false)
-	http.Redirect(w, r, "/admin/new/help", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/help", http.StatusSeeOther)
 }

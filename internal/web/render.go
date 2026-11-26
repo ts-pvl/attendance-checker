@@ -17,11 +17,8 @@ import (
 
 type pageTemplate = template.Template
 
-// Pages that use the admin layout; qr pages are standalone.
-var layoutPages = []string{"login", "today", "hours", "students", "student", "slips", "anomalies", "audit"}
-
-// Pages of the new admin UI (nlayout.html).
-var newLayoutPages = []string{"dash", "nstudents", "nstudent", "nslips", "nanomalies", "njournal", "ntoday", "nplatform", "nhelp"}
+// Pages that use the admin layout (layout.html); qr pages are standalone.
+var layoutPages = []string{"login", "dash", "today", "hours", "students", "student", "slips", "anomalies", "journal", "platform", "help"}
 
 type anomListData struct {
 	Visits []anomVisit
@@ -96,13 +93,6 @@ func (s *Server) parseTemplates() error {
 	s.pages = map[string]*pageTemplate{}
 	for _, name := range layoutPages {
 		t, err := template.New("layout.html").Funcs(s.funcs()).ParseFS(templateFS, "templates/layout.html", "templates/"+name+".html")
-		if err != nil {
-			return fmt.Errorf("template %s: %w", name, err)
-		}
-		s.pages[name] = t
-	}
-	for _, name := range newLayoutPages {
-		t, err := template.New("nlayout.html").Funcs(s.funcs()).ParseFS(templateFS, "templates/nlayout.html", "templates/"+name+".html")
 		if err != nil {
 			return fmt.Errorf("template %s: %w", name, err)
 		}
@@ -199,8 +189,8 @@ func back(w http.ResponseWriter, r *http.Request, fallback, msg string, isErr bo
 }
 
 // returnTo is where a form action goes back to: the page it was sent from
-// (form field "return", so the new UI stays in the new UI), if that is an
-// admin path on this site; otherwise fallback. It never leaves the site.
+// (form field "return", with its filters and paging), if that is an admin
+// path on this site; otherwise fallback. It never leaves the site.
 func returnTo(r *http.Request, fallback string) string {
 	v := r.PostFormValue("return")
 	u, err := url.Parse(v)
@@ -209,14 +199,6 @@ func returnTo(r *http.Request, fallback string) string {
 		return fallback
 	}
 	return v
-}
-
-// slipsPath: the printable link slips of the UI the request came from.
-func slipsPath(r *http.Request) string {
-	if r.PostFormValue("ui") == "new" {
-		return "/admin/new/students/slips"
-	}
-	return "/admin/students/slips"
 }
 
 // formatXP writes XP the way the learning platform shows it: B, kB, MB

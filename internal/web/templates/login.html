@@ -1,5 +1,5 @@
 {{define "content"}}
-<section class="login">
+<section class="card login">
   <h1>{{t "login.title"}}</h1>
   {{with .D}}{{with .Error}}<p class="flash err">{{t .}}</p>{{end}}{{end}}
   <form method="post" action="/admin/login" class="stack">
@@ -9,7 +9,7 @@
     <label>{{t "login.password"}}
       <input name="password" type="password" autocomplete="current-password" required>
     </label>
-    <button>{{t "login.submit"}}</button>
+    <button class="btn primary">{{t "login.submit"}}</button>
   </form>
 </section>
 {{end}}

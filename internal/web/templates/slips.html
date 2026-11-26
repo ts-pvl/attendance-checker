@@ -1,8 +1,9 @@
 {{define "content"}}
 <div class="noprint">
+  <p class="crumbs"><a href="/admin/students">← {{t "students.title"}}</a></p>
   <h1>{{t "students.slips"}}</h1>
   <p class="flash">{{t "students.slips_hint"}}</p>
-  <p><button type="button" data-print>{{t "c.print"}}</button> <a href="/admin/students">← {{t "students.title"}}</a></p>
+  <p><button type="button" class="btn primary" data-print>{{t "c.print"}}</button></p>
 </div>
 {{if .D}}
 <div class="slips">

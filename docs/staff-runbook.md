@@ -4,18 +4,16 @@
 
 Admin UI: `http://<server>:8080/admin` (school LAN only, not from the lab PCs).
 
-There are two interfaces. The switch at the top right moves between them, and
-the next login opens the one used last.
+The tabs at the top are Dashboard, Today, Hours, Students, Anomalies, Peer
+help, Platform and Journal (admins only).
 
-* **Dashboard** (new): hours, students present, load by hour and weekday, the
-  attendance matrix and a table of all students for a chosen period (the
-  current week by default; the matrix has its own period, the current month by
-  default). Its tabs are Today, Students, Anomalies, Peer help, Platform and
-  Journal (admins).
-  Students, Anomalies and Journal have the same actions as the old pages.
-  The dashboard keeps the dates you chose while you visit the other tabs, until
-  you reload the page or close the browser tab.
-* **Admin** (old): Today, Hours, Students, Anomalies and Audit log, as below.
+The **Dashboard** opens first. It shows hours, students present, load by hour
+and weekday, the attendance matrix and a table of all students for a chosen
+period (the current week by default; the matrix has its own period, the current
+month by default). It keeps the dates you chose while you visit the other tabs,
+until you reload the page or close the browser tab.
+
+Old bookmarks still work: they lead to the same pages.
 
 ## Morning check (30 seconds)
 
@@ -28,15 +26,17 @@ Open **Today** and look at the four cards at the top:
 | Bot last reached Telegram | under a minute ago | red error, or "never" |
 | Open visits | matches who is in the room | — |
 
-In the PC table, yellow rows are PCs with a session but no check-in. Remind those students to scan.
+In the PC grid below, orange tiles are PCs where someone is logged in but has
+not scanned the code. Remind those students to scan. A tile with a dashed
+border and **!** has stopped reporting: the PC may be off the network or frozen.
 
 If something looks wrong, check whether the service is running (see *Restart*).
 Enter visits missed during an outage as corrections (below).
 
-### The room at a glance (new interface)
+### The room at a glance
 
-The **Today** tab of the new interface shows every PC as a tile, laid out like
-the room. The page refreshes itself every 30 seconds.
+Below the cards, **Today** shows every PC as a tile, laid out like the room.
+The page refreshes itself every 30 seconds.
 
 | Tile | Meaning |
 |---|---|
@@ -44,8 +44,8 @@ the room. The page refreshes itself every 30 seconds.
 | Orange, "no check-in" | someone is logged in but has not scanned the code, and for how long |
 | Grey, "inactive" | nobody is logged in, and how long ago the last login ended |
 
-Below the grid is the list of sessions that ended today, most recent first. It
-can be sorted by PC, session length or time since the end, filtered by group
+Below the grid is the list of sessions that ended today, most recent first,
+with how each one ended (logout, idle logout, timeout…). It can be sorted by PC, session length or time since the end, filtered by group
 and split into pages.
 
 Admins can make the grid match the room: set the number of rows and columns
@@ -61,6 +61,15 @@ Columns: `name`, `group`, optional `id` and `login` (the platform login; Russian
 are matched by `id`, then by `login`, otherwise by exact name.
 Leavers: open the student and press *Archive* (history stays).
 
+**Find a student or export the list.** On the Students tab, type part of a
+name or a platform login in the search box; the list updates as you type.
+Letters written either way are found: "нурлан" finds "Нұрлан", "елкина" finds
+"Ёлкина". The Telegram menu shows only students who have linked Telegram, or
+only those who have not yet (a printed link that was never opened counts as not
+linked). *Export CSV* downloads the list exactly as filtered and sorted, all
+pages, with the columns name, group, login and telegram (the @username, or the
+Telegram name for an account without one; empty when not linked).
+
 **Enrollment day.** Students → *Create links for everyone not yet linked* → print the slips page.
 Hand each slip to its student privately: whoever opens a link first gets that identity.
 Watch the Telegram column turn green; the summary line counts who is left.
@@ -71,21 +80,16 @@ student → *Unlink* (enter a reason) → *New link* → give the new slip priva
 **Correct a visit or add a missed one** (admins). Open the student, find the
 visit → *Edit* or *Delete*, or use *Add a missed visit* at the bottom. A
 reason is always required. The original record stays and the change appears
-under *Corrections* and in the Audit log.
+under *Corrections* and in the Journal.
 
-**Hours.** Hours → choose day / week / month and a group → *Download CSV* for
-the same numbers in a spreadsheet. Visits that cross midnight are split
-between the two days.
+**Hours.** Hours → choose day / week / month, a date and a group (and, if
+needed, *Show students without visits*) → *Download CSV* for the same numbers
+in a spreadsheet. The line under the title says which rules apply (rounding,
+minimum visit, daily cap). Visits that cross midnight are split between the
+two days.
 
-**Anomalies** (weekly). Slow or old-code scans can mean a photo or a streamed
-screen. *One student on several PCs* can mean a lent Telegram account. *Several
-students on one PC session* means a new check-in ended the previous student's
-visit: usually a swap without logging out, but worth a look.
-*Auto-closed* visits were still open at 04:00, so check their end time. *Failed
-scans* shows rejected attempts.
-
-The Anomalies tab of the new interface adds four lists for the chosen period
-(the current week by default):
+**Anomalies** (weekly). The tab has these lists for the chosen period (the
+current week by default):
 
 * *Low-activity sessions*: long gaps between moments of activity, again and
   again (median gap of 10 minutes or more). Someone may have left the PC
@@ -95,12 +99,16 @@ The Anomalies tab of the new interface adds four lists for the chosen period
   old, or one the screen had already replaced with a newer code. It can mean a
   photo of the screen was sent to someone.
 * *Sessions with 2–3 anomalies*: visits that are in two or three of these lists.
+* *One student on several PCs*: can mean a lent Telegram account.
+* *Several students on one PC session*: a new check-in ended the previous
+  student's visit. Usually a swap without logging out, but worth a look.
+* *Auto-closed visits*: still open at 04:00, so check their end time.
+* *Failed scans*: rejected attempts.
 
 The thresholds are settings in `attendance.conf` (`anomaly_low_activity_gap`,
 `anomaly_long_visit`, `anomaly_latency`).
 
-**Points for social activities** (admins). On the *Today* tab of the new
-interface, enter the points and what they are for, then press *Add to everyone
+**Points for social activities** (admins). On the *Today* tab, enter the points and what they are for, then press *Add to everyone
 present*: every student checked in at that moment gets them. To give points to
 one student, use the same fields on the student's page. A mistake is undone
 with *Cancel*: the entry stays in the list, crossed out, and both steps are in
@@ -112,8 +120,7 @@ platform login. The platform's address is already in the server's settings.
 
 1. A platform admin logs in to the platform's Git (`https://<platform>/git`),
    opens *Settings → Applications* and presses *Generate New Token*.
-2. In the new interface open *Platform → Settings*, paste the token and press
-   *Save*.
+2. Open *Platform → Settings*, paste the token and press *Save*.
 3. Give the students their platform logins: in the *Add student* form, on the
    student's page (*Edit name, group or login*), or with a `login` column in
    the student list file.
@@ -147,7 +154,7 @@ sudo -u attendance attendance user passwd maria -config /etc/attendance/attendan
 sudo -u attendance attendance user disable maria -config /etc/attendance/attendance.conf
 ```
 
-Teachers can read everything except the audit log; admins can also change data.
+Teachers can read everything except the Journal; admins can also change data.
 
 ## Updates
 

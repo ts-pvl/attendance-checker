@@ -353,7 +353,9 @@ if (( DO_SERVER )); then
     ask PORT "Port" "$PORT"
   fi
   python3 -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$SERVER_IP" 2>/dev/null || die "not an IPv4 address: $SERVER_IP"
-  [[ "$PORT" =~ ^[0-9]+$ ]] && (( PORT >= 1024 && PORT <= 65535 )) || die "port must be 1024-65535"
+  if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1024 || PORT > 65535 )); then
+    die "port must be 1024-65535"
+  fi
   ip -4 -o addr show | grep -q " $SERVER_IP/" || warn "$SERVER_IP is not an address of this PC"
   if awk -F'\t' -v ip="$SERVER_IP" '$2 == ip {f=1} END {exit !f}' "$WORK/pcs.tsv"; then
     die "$SERVER_IP is listed as a lab PC in the inventory"

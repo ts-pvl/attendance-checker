@@ -3,39 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{brand}}</title>
 <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false}'>
-<title>{{t "app.title"}}</title>
-<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <script src="/static/htmx.min.js" defer></script>
-<script src="/static/qrcode.js" defer></script>
-<script src="/static/qrsvg.js" defer></script>
+<link rel="stylesheet" href="/static/dash.css">
+<script src="/static/dash.js" defer></script>
+{{if eq .Page "today"}}<script src="/static/today.js" defer></script>{{end}}
+{{if eq .Page "slips"}}<script src="/static/qrcode.js" defer></script><script src="/static/qrsvg.js" defer></script>{{end}}
 <script src="/static/admin.js" defer></script>
 </head>
-<body{{with .Staff}} hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'{{end}}>
-{{with .Staff}}
-<header class="top">
-  <nav>
-    <strong class="brand">{{t "app.title"}}</strong>
-    <a href="/admin/today" {{if eq $.Page "today"}}aria-current="page"{{end}}>{{t "nav.today"}}</a>
-    <a href="/admin/hours" {{if eq $.Page "hours"}}aria-current="page"{{end}}>{{t "nav.hours"}}</a>
-    <a href="/admin/students" {{if or (eq $.Page "students") (eq $.Page "student") (eq $.Page "slips")}}aria-current="page"{{end}}>{{t "nav.students"}}</a>
-    <a href="/admin/anomalies" {{if eq $.Page "anomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>
-    {{if .IsAdmin}}<a href="/admin/audit" {{if eq $.Page "audit"}}aria-current="page"{{end}}>{{t "nav.audit"}}</a>{{end}}
+<body class="dash">
+{{$p := .Page}}
+<header class="dh noprint">
+  <div class="dh-brand"><span class="dot" aria-hidden="true"></span>{{brand}}</div>
+  {{with .Staff}}
+  <nav class="tabs" aria-label="{{t "ui.sections"}}">
+    <a href="/admin/dashboard" data-dash-tab {{if eq $p "dash"}}aria-current="page"{{end}}>{{t "ui.dashboard"}}</a>
+    <a href="/admin/today" {{if eq $p "today"}}aria-current="page"{{end}}>{{t "nav.today"}}</a>
+    <a href="/admin/hours" {{if eq $p "hours"}}aria-current="page"{{end}}>{{t "nav.hours"}}</a>
+    <a href="/admin/students" {{if or (eq $p "students") (eq $p "student") (eq $p "slips")}}aria-current="page"{{end}}>{{t "nav.students"}}</a>
+    <a href="/admin/anomalies" {{if eq $p "anomalies"}}aria-current="page"{{end}}>{{t "nav.anomalies"}}</a>
+    <a href="/admin/help" {{if eq $p "help"}}aria-current="page"{{end}}>{{t "nav.help"}}</a>
+    <a href="/admin/platform" {{if eq $p "platform"}}aria-current="page"{{end}}>{{t "nav.platform"}}</a>
+    {{if .IsAdmin}}<a href="/admin/journal" {{if eq $p "journal"}}aria-current="page"{{end}}>{{t "nav.audit"}}</a>{{end}}
   </nav>
-  <nav class="ui-switch" aria-label="{{t "ui.switch"}}">
-    <a href="/admin/ui/new">{{t "ui.dashboard"}}</a>
-    <a href="/admin/ui/old" aria-current="page">{{t "ui.admin"}}</a>
-  </nav>
-  <form method="post" action="/admin/logout" class="who">
-    <span>{{.Username}} · {{if .IsAdmin}}{{t "role.admin"}}{{else}}{{t "role.teacher"}}{{end}}</span>
-    <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <button class="link">{{t "nav.logout"}}</button>
-  </form>
+  {{end}}
+  <div class="dh-right">
+    <button type="button" class="icon" data-theme-toggle title="{{t "ui.theme"}}" aria-label="{{t "ui.theme"}}">◐</button>
+    {{with .Staff}}
+    <span class="who muted">{{.Username}} · {{if .IsAdmin}}{{t "role.admin"}}{{else}}{{t "role.teacher"}}{{end}}</span>
+    <form method="post" action="/admin/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="plain">{{t "nav.logout"}}</button>
+    </form>
+    {{end}}
+  </div>
 </header>
-{{end}}
-<main>
+<main class="dm">
 {{if .Flash}}<p class="flash{{if .FlashErr}} err{{end}}" role="status">{{.Flash}}</p>{{end}}
 {{template "content" .}}
 </main>
 </body>
 </html>
+
+{{/* "N–M of T" and page links; the links work without JavaScript. */}}
+{{define "pager"}}
+<div class="pager">
+  <span class="muted">{{if .Total}}{{t "dash.shown" .First .Last .Total}}{{end}}</span>
+  {{if .Links}}
+  <nav aria-label="{{t "dash.pages"}}">
+    {{if .Prev}}<a href="{{.Prev}}" aria-label="{{t "dash.prev"}}">‹</a>{{else}}<span class="off" aria-hidden="true">‹</span>{{end}}
+    {{range .Links}}{{if .Gap}}<span class="gap">…</span>{{else if .Current}}<span class="cur" aria-current="page">{{.Num}}</span>{{else}}<a href="{{.URL}}">{{.Num}}</a>{{end}}{{end}}
+    {{if .Next}}<a href="{{.Next}}" aria-label="{{t "dash.next"}}">›</a>{{else}}<span class="off" aria-hidden="true">›</span>{{end}}
+  </nav>
+  {{end}}
+</div>
+{{end}}
+
+{{/* Page-size menu: .PerOpts with the parameter .Name. */}}
+{{define "per-select"}}
+<label class="per"><span>{{t "dash.per_page"}}</span>
+  <select name="{{.Name}}">{{range .Opts}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select>
+</label>
+{{end}}

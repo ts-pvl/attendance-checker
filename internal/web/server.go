@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strings"
 	"time"
 
 	"attendance/internal/bot"
@@ -84,16 +85,33 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("GET /admin/{$}", s.staff(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, s.home(r), http.StatusSeeOther)
 	}))
-	mux.Handle("GET /admin/ui/{which}", s.staff(s.handleUISwitch))
 	mux.Handle("GET /admin/dashboard", s.staff(s.handleDashboard))
 	mux.Handle("GET /admin/dashboard.csv", s.staff(s.handleDashboardCSV))
-	mux.Handle("GET /admin/new/today", s.staff(s.handleNewToday))
-	mux.Handle("POST /admin/new/today/layout", s.admin(s.handleTodayLayout))
-	mux.Handle("GET /admin/new/help", s.staff(s.handleNewHelp))
+	mux.Handle("GET /admin/today", s.staff(s.handleToday))
+	mux.Handle("POST /admin/today/layout", s.admin(s.handleTodayLayout))
+	mux.Handle("GET /admin/hours", s.staff(s.handleHours))
+	mux.Handle("GET /admin/hours.csv", s.staff(s.handleHoursCSV))
+	mux.Handle("GET /admin/students", s.staff(s.handleStudents))
+	mux.Handle("GET /admin/students.csv", s.staff(s.handleStudentsCSV))
+	mux.Handle("GET /admin/students/slips", s.staff(s.handleSlips))
+	mux.Handle("GET /admin/students/{id}", s.staff(s.handleStudent))
+	mux.Handle("GET /admin/anomalies", s.staff(s.handleAnomalies))
+	mux.Handle("GET /admin/help", s.staff(s.handleHelp))
+	mux.Handle("GET /admin/platform", s.staff(s.handlePlatform))
+	mux.Handle("GET /admin/journal", s.admin(s.handleJournal))
+
+	// Addresses of the earlier two-interface admin, for old bookmarks.
+	mux.Handle("GET /admin/new/{rest...}", s.staff(handleOldNewUI))
+	mux.Handle("GET /admin/ui/{which}", s.staff(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+	}))
+	mux.Handle("GET /admin/audit", s.admin(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/admin/journal", http.StatusSeeOther)
+	}))
+
 	mux.Handle("POST /admin/help/import", s.admin(s.handleHelpImport))
 	mux.Handle("POST /admin/help/alias", s.admin(s.handleHelpAlias))
 	mux.Handle("POST /admin/help/delete", s.admin(s.handleHelpDelete))
-	mux.Handle("GET /admin/new/platform", s.staff(s.handleNewPlatform))
 	mux.Handle("POST /admin/platform/settings", s.admin(s.handlePlatformSettings))
 	mux.Handle("POST /admin/platform/sync", s.admin(s.handlePlatformSync))
 	mux.Handle("POST /admin/platform/link", s.admin(s.handlePlatformLink))
@@ -102,21 +120,6 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("POST /admin/points/batch/{id}/cancel", s.admin(s.handlePointsBatchCancel))
 	mux.Handle("POST /admin/points/{id}/cancel", s.admin(s.handlePointsCancel))
 	mux.Handle("POST /admin/students/{id}/points", s.admin(s.handlePointsStudent))
-	mux.Handle("GET /admin/new/students", s.staff(s.handleNewStudents))
-	mux.Handle("GET /admin/new/students/slips", s.staff(s.handleNewSlips))
-	mux.Handle("GET /admin/new/students/{id}", s.staff(s.handleNewStudent))
-	mux.Handle("GET /admin/new/anomalies", s.staff(s.handleNewAnomalies))
-	mux.Handle("GET /admin/new/journal", s.admin(s.handleNewJournal))
-	mux.Handle("GET /admin/today", s.staff(s.handleToday))
-	mux.Handle("GET /admin/today/live", s.staff(s.handleTodayLive))
-	mux.Handle("GET /admin/hours", s.staff(s.handleHours))
-	mux.Handle("GET /admin/hours.csv", s.staff(s.handleHoursCSV))
-	mux.Handle("GET /admin/students", s.staff(s.handleStudents))
-	mux.Handle("GET /admin/students/slips", s.staff(s.handleSlips))
-	mux.Handle("GET /admin/students/{id}", s.staff(s.handleStudent))
-	mux.Handle("GET /admin/anomalies", s.staff(s.handleAnomalies))
-	mux.Handle("GET /admin/audit", s.admin(s.handleAudit))
-
 	mux.Handle("POST /admin/students/import", s.admin(s.handleImport))
 	mux.Handle("POST /admin/students/add", s.admin(s.handleAddStudent))
 	mux.Handle("POST /admin/students/codes", s.admin(s.handleBulkCodes))
@@ -193,5 +196,19 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/qr", http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/admin/today", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+}
+
+// handleOldNewUI sends /admin/new/X (the pages of the former "new UI") to
+// /admin/X, keeping the query. /admin/new/journal was the audit log.
+func handleOldNewUI(w http.ResponseWriter, r *http.Request) {
+	rest := r.PathValue("rest")
+	if rest == "" || strings.ContainsAny(rest, "\\\r\n") || strings.HasPrefix(rest, "/") {
+		rest = "dashboard"
+	}
+	dest := "/admin/" + rest
+	if r.URL.RawQuery != "" {
+		dest += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, dest, http.StatusSeeOther)
 }

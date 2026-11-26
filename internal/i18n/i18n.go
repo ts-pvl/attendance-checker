@@ -186,7 +186,6 @@ var messages = map[string][2]string{
 	"qr.checked_in":       {"Checked in on this PC", "Отмечены на этом компьютере"},
 
 	// Admin: common
-	"app.title":     {"Attendance", "Посещаемость"},
 	"nav.today":     {"Today", "Сегодня"},
 	"nav.hours":     {"Hours", "Часы"},
 	"nav.students":  {"Students", "Ученики"},
@@ -221,8 +220,6 @@ var messages = map[string][2]string{
 	"c.who":         {"Who", "Кто"},
 	"c.what":        {"What", "Что"},
 	"c.details":     {"Details", "Подробности"},
-	"c.from":        {"From", "С"},
-	"c.to":          {"To", "По"},
 	"c.prev":        {"← Previous", "← Назад"},
 	"c.next":        {"Next →", "Вперёд →"},
 	"c.now":         {"Current", "Текущий"},
@@ -255,10 +252,7 @@ var messages = map[string][2]string{
 
 	// UI switcher (both admin UIs) and the new analytics dashboard
 	"ui.dashboard": {"Dashboard", "Дашборд"},
-	"ui.admin":     {"Admin", "Админка"},
-	"ui.switch":    {"Interface", "Интерфейс"},
 	"ui.sections":  {"Sections", "Разделы"},
-	"ui.old":       {"Old interface", "Старый интерфейс"},
 	"ui.theme":     {"Switch light/dark theme", "Сменить светлую/тёмную тему"},
 
 	"dash.analytics":        {"Analytics", "Аналитика"},
@@ -462,6 +456,8 @@ var messages = map[string][2]string{
 	"ntoday.l_login":         {"logged in, no check-in", "вход без отметки"},
 	"ntoday.l_free":          {"not in use", "не используется"},
 	"ntoday.no_checkin":      {"no check-in", "без отметки"},
+	"ntoday.stale":           {"PCs not answering: %d", "ПК не отвечают: %d"},
+	"ntoday.stale_tile":      {"no heartbeat since %s", "нет сигнала с %s"},
 	"ntoday.inactive":        {"inactive", "неактивен"},
 	"ntoday.never":           {"no sessions yet", "сеансов не было"},
 	"ntoday.rows":            {"Rows", "Рядов"},
@@ -537,15 +533,6 @@ var messages = map[string][2]string{
 	"today.open_visits":    {"Open visits", "Открытых посещений"},
 	"today.pcs":            {"PCs", "Компьютеры"},
 	"today.session_since":  {"Logged in since", "Вход с"},
-	"today.heartbeat":      {"Last heartbeat", "Последний сигнал"},
-	"today.idle":           {"Idle", "Бездействие"},
-	"today.checked_in":     {"Checked in", "Отмечены"},
-	"today.no_checkin":     {"session, no check-in", "сеанс без отметки"},
-	"today.no_session":     {"no session", "нет сеанса"},
-	"today.last_seen":      {"no session · last heartbeat %s", "нет сеанса · последний сигнал %s"},
-	"today.idle_unknown":   {"unknown", "неизвестно"},
-	"today.pcs_summary":    {"%d PCs with a session, %d of them without a check-in.", "Сеансов на ПК: %d, из них без отметки: %d."},
-	"today.today_visits":   {"Visits today", "Посещения за сегодня"},
 
 	// Admin: Hours
 	"hours.title":        {"Hours", "Часы"},
@@ -564,6 +551,7 @@ var messages = map[string][2]string{
 	"hours.cap":          {"at most %s per day", "не более %s в день"},
 	"hours.no_visits":    {"Show students without visits", "Показывать учеников без посещений"},
 	"hours.in_progress":  {"still here", "ещё здесь"},
+	"hours.period":       {"Period", "Период"},
 
 	// Admin: Students
 	"students.title":          {"Students", "Ученики"},
@@ -594,6 +582,11 @@ var messages = map[string][2]string{
 	"students.edit":           {"Edit name, group or login", "Изменить имя, группу или логин"},
 	"students.login":          {"Platform login", "Логин на платформе"},
 	"students.login_optional": {"Platform login (optional)", "Логин на платформе (необязательно)"},
+	"students.search":         {"Search by name or login", "Поиск по имени или логину"},
+	"students.tg_all":         {"Telegram: everyone", "Telegram: все"},
+	"students.tg_linked":      {"Telegram linked", "Telegram привязан"},
+	"students.tg_unlinked":    {"Telegram not linked", "Telegram не привязан"},
+	"students.export":         {"Export CSV", "Экспорт в CSV"},
 
 	// Admin: Student detail
 	"student.visits":         {"Visits", "Посещения"},
@@ -610,8 +603,6 @@ var messages = map[string][2]string{
 
 	// Admin: Anomalies
 	"anom.title":         {"Anomalies", "Аномалии"},
-	"anom.latency":       {"Slow or old-code scans", "Медленные сканы или сканы старого кода"},
-	"anom.latency_hint":  {"The code was scanned more than %s after it appeared, or after the screen had already shown a newer code. Can mean a photo or a relayed screen.", "Код отсканирован более чем через %s после появления или после того, как на экране уже был новый код. Может означать фото или трансляцию экрана."},
 	"anom.multi_pc":      {"One student on several PCs", "Один ученик на нескольких ПК"},
 	"anom.multi_pc_hint": {"Checked in on a second PC within %s while the first PC was still in use. Can mean a lent Telegram account.", "Отметка на втором ПК в пределах %s, пока первый ещё использовался. Может означать, что аккаунт Telegram передали другому."},
 	"anom.many":          {"Several students on one PC session", "Несколько учеников в одном сеансе ПК"},
