@@ -568,7 +568,7 @@ var messages = map[string][2]string{
 	// Admin: Students
 	"students.title":          {"Students", "Ученики"},
 	"students.import":         {"Import or update from CSV", "Импорт или обновление из CSV"},
-	"students.import_hint":    {"Columns: name, group, id (optional). Comma or semicolon separated. Existing students are matched by id, otherwise by exact name.", "Столбцы: name/имя, group/группа, id (необязательно). Разделитель — запятая или точка с запятой. Существующие ученики ищутся по id, иначе по точному имени."},
+	"students.import_hint":    {"Columns: name, group, and optionally id and login (the platform login). Comma or semicolon separated. Existing students are matched by id, then by login, otherwise by exact name.", "Столбцы: name/имя, group/группа и необязательные id и login/логин (логин на платформе). Разделитель — запятая или точка с запятой. Существующие ученики ищутся по id, затем по логину, иначе по точному имени."},
 	"students.import_done":    {"Imported: %d added, %d updated, %d unchanged.", "Импорт: добавлено %d, обновлено %d, без изменений %d."},
 	"students.add":            {"Add a student", "Добавить ученика"},
 	"students.status":         {"Telegram", "Telegram"},

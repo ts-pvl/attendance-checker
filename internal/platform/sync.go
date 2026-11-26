@@ -316,8 +316,8 @@ func nullMs(t time.Time) sql.NullInt64 {
 func Store(ctx context.Context, db *store.DB, now time.Time, d Data) (Result, error) {
 	var res Result
 	err := db.InTx(ctx, func(tx *sql.Tx) error {
-		for _, t := range []string{"platform_users", "platform_events", "platform_user_events"} {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM "+t); err != nil {
+		for _, q := range []string{"DELETE FROM platform_users", "DELETE FROM platform_events", "DELETE FROM platform_user_events"} {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
 				return err
 			}
 		}

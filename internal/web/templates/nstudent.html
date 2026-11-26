@@ -58,7 +58,7 @@
     {{end}}</div>
   </div>
   {{with $.D.Platform}}
-  <div class="kpis small-kpis">
+  <div class="kpis small-kpis four">
     <div class="kpi"><div class="k-label">{{t "plat.col_login"}}</div><div class="k-value mono">{{.Login}}</div><div class="k-sub">{{.Name}}{{with .OtherName}} · {{.}}{{end}}</div></div>
     <div class="kpi"><div class="k-label">{{t "plat.col_level"}}</div><div class="k-value">{{if .Event.ID}}{{.Level}}{{else}}—{{end}}</div><div class="k-sub">{{if .Event.ID}}<span class="mono">{{.Event.Name}}</span>{{else}}{{t "plat.no_event"}}{{end}}</div></div>
     <div class="kpi"><div class="k-label">{{t "plat.col_xp"}}</div><div class="k-value" title="{{.XP}}">{{xp .XP}}</div><div class="k-sub">{{if .Event.ID}}<span class="mono">{{.Event.Name}}</span>{{end}}</div></div>
