@@ -1,80 +1,157 @@
 {{define "content"}}
 {{$admin := false}}{{with $.Staff}}{{$admin = .IsAdmin}}{{end}}
 {{with .D}}
-{{$st := .Student}}
+{{$st := .Student}}{{$ret := .Return}}
 {{$act := printf "/admin/students/%d/visits?period=%s&date=%s" $st.ID .Period.Kind (date .Period.From)}}
-<h1>{{$st.Name}} {{if $st.Group}}<small class="muted">{{$st.Group}}</small>{{end}} {{if $st.Archived}}<span class="tag">{{t "students.archived"}}</span>{{end}}</h1>
+<p class="crumbs"><a href="/admin/students">← {{t "students.title"}}</a></p>
+<h1>{{$st.Name}} {{if $st.Group}}<span class="muted h1-sub">{{$st.Group}}</span>{{end}} {{if $st.Login}}<span class="muted h1-sub mono">{{$st.Login}}</span>{{end}} {{if $st.Archived}}<span class="pill">{{t "students.archived"}}</span>{{end}}</h1>
 
-<section class="panel">
+<section class="card">
   <h2>{{t "students.tg_account"}}</h2>
   <p>
-  {{if $st.Linked}}<span class="tag ok">{{t "students.linked"}}</span> {{$st.TGName}}{{if $st.TGUsername}} @{{$st.TGUsername}}{{end}} · ID {{$st.TGUserID}} · {{dt $st.LinkedAt}}
-  {{else if eq $st.CodeState "pending"}}<span class="tag warn">{{t "students.code_pending"}}</span> {{t "students.expires" (dt $st.CodeExpires)}} · <a href="/admin/students/slips?id={{$st.ID}}">{{t "students.link"}}</a>
-  {{else if eq $st.CodeState "expired"}}<span class="tag err">{{t "students.code_expired"}}</span>
-  {{else}}<span class="tag">{{t "students.not_linked"}}</span>{{end}}
+  {{if $st.Linked}}<span class="pill ok">{{t "students.linked"}}</span> {{$st.TGName}}{{if $st.TGUsername}} @{{$st.TGUsername}}{{end}} · ID {{$st.TGUserID}} · {{dt $st.LinkedAt}}
+  {{else if eq $st.CodeState "pending"}}<span class="pill warn">{{t "students.code_pending"}}</span> {{t "students.expires" (dt $st.CodeExpires)}} · <a href="/admin/students/slips?id={{$st.ID}}">{{t "students.link"}}</a>
+  {{else if eq $st.CodeState "expired"}}<span class="pill err">{{t "students.code_expired"}}</span>
+  {{else}}<span class="pill">{{t "students.not_linked"}}</span>{{end}}
   </p>
   {{if $admin}}
   <div class="row">
     {{if $st.Linked}}
     <form method="post" action="/admin/students/{{$st.ID}}/unlink" class="inline" data-confirm="{{t "students.unlink_confirm"}}">
-      <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+      <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
       <input name="reason" placeholder="{{t "c.reason_ph"}}" required>
-      <button class="danger">{{t "students.unlink"}}</button>
+      <button class="btn danger">{{t "students.unlink"}}</button>
     </form>
     {{else if not $st.Archived}}
     <form method="post" action="/admin/students/{{$st.ID}}/code" class="inline">
       <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
-      <button>{{t "students.gen_code"}}</button>
+      <button class="btn primary">{{t "students.gen_code"}}</button>
     </form>
     {{end}}
     <form method="post" action="/admin/students/{{$st.ID}}/archive" class="inline">
-      <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
-      {{if $st.Archived}}<input type="hidden" name="archived" value="0"><button class="secondary">{{t "students.unarchive"}}</button>
-      {{else}}<input type="hidden" name="archived" value="1"><button class="secondary">{{t "students.archive"}}</button>{{end}}
+      <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
+      {{if $st.Archived}}<input type="hidden" name="archived" value="0"><button class="btn">{{t "students.unarchive"}}</button>
+      {{else}}<input type="hidden" name="archived" value="1"><button class="btn">{{t "students.archive"}}</button>{{end}}
     </form>
   </div>
   <details>
     <summary>{{t "students.edit"}}</summary>
     <form method="post" action="/admin/students/{{$st.ID}}/edit" class="filters">
-      <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
-      <input name="name" value="{{$st.Name}}" required>
-      <input name="group" value="{{$st.Group}}" placeholder="{{t "c.group"}}">
-      <input name="login" value="{{$st.Login}}" placeholder="{{t "students.login"}}">
-      <button>{{t "c.save"}}</button>
+      <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
+      <input name="name" value="{{$st.Name}}" required aria-label="{{t "c.name"}}">
+      <input name="group" value="{{$st.Group}}" placeholder="{{t "c.group"}}" aria-label="{{t "c.group"}}">
+      <input name="login" value="{{$st.Login}}" placeholder="{{t "students.login"}}" aria-label="{{t "students.login"}}" pattern="@?[A-Za-z0-9][A-Za-z0-9._\-]{0,63}">
+      <button class="btn primary">{{t "c.save"}}</button>
     </form>
   </details>
   {{end}}
 </section>
 
-<h2>{{t "student.visits"}}</h2>
-<p class="pager">
-  <a href="?{{.Prev}}">{{t "c.prev"}}</a>
-  <strong>{{date .Period.From}} – {{date (.Period.To.AddDate 0 0 -1)}}</strong>
-  <a href="?{{.Next}}">{{t "c.next"}}</a>
-  <span>{{t "student.month_total" (dur .Total)}}</span>
-</p>
-{{if .Days}}
-<p class="days">{{range .Days}}<span><small>{{weekday .Day}}</small> {{dur .Total}}</span>{{end}}</p>
-{{end}}
+<section class="card" id="platform">
+  <div class="c-head"><h2>{{t "plat.on_platform"}}</h2>
+    <div class="tools">{{with $.D.Platform}}<span>{{t "plat.synced_at" (dt .Synced)}}</span>{{end}}
+    {{if and $admin $st.Login $.D.PlatReady}}
+      <form method="post" action="/admin/platform/sync">
+        <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$.D.Return}}#platform">
+        <button class="btn">{{t "plat.sync_now"}}</button>
+      </form>
+    {{end}}</div>
+  </div>
+  {{with $.D.Platform}}
+  <div class="kpis small-kpis four">
+    <div class="kpi"><div class="k-label">{{t "plat.col_login"}}</div><div class="k-value mono">{{.Login}}</div><div class="k-sub">{{.Name}}{{with .OtherName}} · {{.}}{{end}}</div></div>
+    <div class="kpi"><div class="k-label">{{t "plat.col_level"}}</div><div class="k-value">{{if .Event.ID}}{{.Level}}{{else}}—{{end}}</div><div class="k-sub">{{if .Event.ID}}<span class="mono">{{.Event.Name}}</span>{{else}}{{t "plat.no_event"}}{{end}}</div></div>
+    <div class="kpi"><div class="k-label">{{t "plat.col_xp"}}</div><div class="k-value" title="{{.XP}}">{{xp .XP}}</div><div class="k-sub">{{if .Event.ID}}<span class="mono">{{.Event.Name}}</span>{{end}}</div></div>
+    <div class="kpi"><div class="k-label">{{t "plat.col_audit"}}</div><div class="k-value">{{if .HasAudit}}{{printf "%.2f" .Audit}}{{else}}—{{end}}</div><div class="k-sub">{{.Email}}</div></div>
+  </div>
+  {{if $.D.PlatEvents}}
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr><th>{{t "plat.col_event"}}</th><th>{{t "plat.col_dates"}}</th><th class="num">{{t "plat.col_level"}}</th><th class="num">{{t "plat.col_xp"}}</th></tr></thead>
+    <tbody>
+    {{range $.D.PlatEvents}}
+    <tr>
+      <td><span class="mono">{{.Name}}</span>{{if .Current}} <span class="pill">{{t "plat.current"}}</span>{{end}}</td>
+      <td>{{if not .Start.IsZero}}{{date .Start}}{{if not .End.IsZero}} – {{date .End}}{{end}}{{end}}</td>
+      <td class="num">{{.Level}}</td>
+      <td class="num" title="{{.XP}}">{{xp .XP}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+  {{else}}<p class="muted">{{if $st.Login}}{{if $.D.PlatSynced.IsZero}}{{t "plat.login_wait" $st.Login}}{{else}}{{t "plat.login_not_found" $st.Login (dt $.D.PlatSynced)}}{{end}}{{else}}{{t "plat.no_student_login"}}{{end}}</p>{{end}}
+</section>
+
+<section class="card" id="help">
+  <div class="c-head"><h2>{{t "help.on_student"}}</h2>{{if $.D.HelpTotal}}<span>{{t "help.student_total" $.D.HelpTotal}}</span>{{end}}</div>
+  {{if $.D.HelpWeeks}}<p class="days">{{range $.D.HelpWeeks}}<span><small><a href="/admin/help?week={{.Week}}">{{t "help.week_label" .Week}}</a></small> {{.N}}</span>{{end}}</p>
+  {{else}}<p class="muted">{{if $st.Login}}{{t "help.student_none"}}{{else}}{{t "plat.no_student_login"}}{{end}}</p>{{end}}
+</section>
+
+<section class="card" id="points">
+  <div class="c-head"><h2>{{t "points.title"}}</h2><span>{{t "points.total" $.D.PointsTotal}}</span></div>
+  {{if $admin}}{{if not $st.Archived}}
+  <form method="post" action="/admin/students/{{$st.ID}}/points" class="filters">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
+    <label class="field">{{t "points.points"}} <input type="number" name="points" min="1" max="{{$.D.MaxPoints}}" step="1" required class="num-input"></label>
+    <label class="field grow">{{t "c.reason"}} <input name="reason" maxlength="300" placeholder="{{t "points.reason_ph"}}" required></label>
+    <button class="btn primary">{{t "points.add"}}</button>
+  </form>
+  {{end}}{{end}}
+  {{if $.D.Points}}
+  <div class="table-wrap">
+  <table class="list">
+    <thead><tr><th><span class="th">{{t "c.when"}}</span></th><th class="num"><span class="th">{{t "points.points"}}</span></th><th><span class="th">{{t "c.reason"}}</span></th><th><span class="th">{{t "c.who"}}</span></th>{{if $admin}}<th></th>{{end}}</tr></thead>
+    <tbody>
+    {{range $.D.Points}}
+    <tr class="{{if not .Cancelled.IsZero}}deleted{{end}}">
+      <td>{{dt .Created}}</td><td class="num">+{{.Points}}</td>
+      <td class="wrap">{{.Reason}}{{if .Batch}} <span class="pill">{{t "points.everyone"}}</span>{{end}}</td>
+      <td class="muted">{{.Actor}}{{if not .Cancelled.IsZero}}<br><small>{{t "points.cancelled_by" .CancelledBy (dt .Cancelled)}}</small>{{end}}</td>
+      {{if $admin}}<td class="actions">{{if .Cancelled.IsZero}}
+        <form method="post" action="/admin/points/{{.ID}}/cancel" data-confirm="{{t "points.cancel_confirm"}}">
+          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
+          <button class="btn small">{{t "points.cancel"}}</button>
+        </form>{{end}}</td>{{end}}
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted">{{t "points.none"}}</p>{{end}}
+</section>
+
+<section class="card">
+<div class="c-head"><h2>{{t "student.visits"}}</h2>
+  <div class="period">
+    <a class="btn" href="{{.Prev}}">{{t "c.prev"}}</a>
+    <strong>{{date .Period.From}} – {{date (.Period.To.AddDate 0 0 -1)}}</strong>
+    <a class="btn" href="{{.Next}}">{{t "c.next"}}</a>
+    <span class="muted">{{t "student.month_total" (dur .Total)}}</span>
+  </div>
+</div>
+{{if .Days}}<p class="days">{{range .Days}}<span><small>{{weekday .Day}}</small> {{dur .Total}}</span>{{end}}</p>{{end}}
 {{if .Visits}}
-<div class="scroll">
-<table>
-  <thead><tr><th>{{t "c.date"}}</th><th>{{t "c.start"}}</th><th>{{t "c.end"}}</th><th>{{t "c.duration"}}</th><th>{{t "c.pc"}}</th><th>{{t "c.ended"}}</th><th></th>{{if $admin}}<th>{{t "c.actions"}}</th>{{end}}</tr></thead>
+<div class="table-wrap">
+<table class="list">
+  <thead><tr><th><span class="th">{{t "c.date"}}</span></th><th><span class="th">{{t "c.start"}}</span></th><th><span class="th">{{t "c.end"}}</span></th><th><span class="th">{{t "c.duration"}}</span></th><th><span class="th">{{t "c.pc"}}</span></th><th><span class="th">{{t "c.ended"}}</span></th><th></th>{{if $admin}}<th><span class="th">{{t "c.actions"}}</span></th>{{end}}</tr></thead>
   <tbody>
   {{range .Visits}}
   <tr class="{{if .Deleted}}deleted{{end}}">
     <td>{{weekday .Start}}</td>
     <td>{{clock .Start}}</td>
-    <td>{{if .Open}}<span class="tag ok">{{reason ""}}</span>{{else}}{{clock .End}}{{if ne (date .Start) (date .End)}} <small>({{date .End}})</small>{{end}}{{end}}</td>
+    <td>{{if .Open}}<span class="pill ok">{{reason ""}}</span>{{else}}{{clock .End}}{{if ne (date .Start) (date .End)}} <small>({{date .End}})</small>{{end}}{{end}}</td>
     <td>{{dur .Duration}}</td>
     <td>{{.Host}}</td>
-    <td>{{if not .Open}}{{reason .EndReason}}{{end}}</td>
+    <td class="muted">{{if not .Open}}{{reason .EndReason}}{{end}}</td>
     <td class="notes">
-      {{if .Deleted}}<span class="tag err">{{t "student.deleted"}}</span>{{end}}
-      {{if .Manual}}<span class="tag">{{t "student.manual"}}</span>{{end}}
-      {{if .Edited}}<span class="tag">{{t "student.edited"}}</span> <small class="muted">{{t "student.was" (clock .OrigStart) (clock .OrigEnd) .OrigHost}}</small>{{end}}
-      {{if .Stale}}<span class="tag warn">{{t "student.stale"}}</span>{{end}}
-      {{if gt .LatencyMs $.D.LatencyMs}}<span class="tag warn">{{t "student.latency" (ms .LatencyMs)}}</span>{{end}}
+      {{if .Deleted}}<span class="pill err">{{t "student.deleted"}}</span>{{end}}
+      {{if .Manual}}<span class="pill">{{t "student.manual"}}</span>{{end}}
+      {{if .Edited}}<span class="pill">{{t "student.edited"}}</span> <small class="muted">{{t "student.was" (clock .OrigStart) (clock .OrigEnd) .OrigHost}}</small>{{end}}
+      {{if .Stale}}<span class="pill warn">{{t "student.stale"}}</span>{{end}}
+      {{if gt .LatencyMs $.D.LatencyMs}}<span class="pill warn">{{t "student.latency" (ms .LatencyMs)}}</span>{{end}}
       {{range .Applied}}<br><small class="muted">{{dt .Created}} {{.Actor}}: {{.Reason}}</small>{{end}}
     </td>
     {{if $admin}}
@@ -83,24 +160,24 @@
       <details>
         <summary>{{t "c.edit"}}</summary>
         <form method="post" action="{{$act}}" class="stack">
-          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
           <input type="hidden" name="action" value="edit">
           <input type="hidden" name="target" value="{{.Key}}">
           <label>{{t "c.start"}} <input type="datetime-local" name="start" value="{{inputdt .Start}}" required></label>
           <label>{{t "c.end"}} <input type="datetime-local" name="end" value="{{inputdt .End}}" required></label>
           <label>{{t "c.pc"}} <input name="host" value="{{.Host}}" list="hosts"></label>
           <label>{{t "c.reason"}} <input name="reason" placeholder="{{t "c.reason_ph"}}" required></label>
-          <button>{{t "c.save"}}</button>
+          <button class="btn primary">{{t "c.save"}}</button>
         </form>
       </details>
       <details>
         <summary>{{t "c.delete"}}</summary>
         <form method="post" action="{{$act}}" class="stack">
-          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+          <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="target" value="{{.Key}}">
           <label>{{t "c.reason"}} <input name="reason" placeholder="{{t "c.reason_ph"}}" required></label>
-          <button class="danger">{{t "c.delete"}}</button>
+          <button class="btn danger">{{t "c.delete"}}</button>
         </form>
       </details>
       {{end}}
@@ -112,29 +189,31 @@
 </table>
 </div>
 {{else}}<p class="muted">{{t "c.none"}}</p>{{end}}
+</section>
 
 <datalist id="hosts">{{range .Hosts}}<option value="{{.}}">{{end}}</datalist>
 
 {{if $admin}}
-<section class="panel">
+<section class="card">
   <h2>{{t "student.add_visit"}}</h2>
   <form method="post" action="{{$act}}" class="filters">
-    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}">
+    <input type="hidden" name="csrf" value="{{$.Staff.CSRF}}"><input type="hidden" name="return" value="{{$ret}}">
     <input type="hidden" name="action" value="add">
-    <label>{{t "c.start"}} <input type="datetime-local" name="start" value="{{inputdt .NowInput}}" required></label>
-    <label>{{t "c.end"}} <input type="datetime-local" name="end" value="{{inputdt .NowInput}}" required></label>
-    <label>{{t "c.pc"}} <input name="host" list="hosts"></label>
-    <label>{{t "c.reason"}} <input name="reason" placeholder="{{t "c.reason_ph"}}" required></label>
-    <button>{{t "c.add"}}</button>
+    <label class="field">{{t "c.start"}} <input type="datetime-local" name="start" value="{{inputdt .NowInput}}" required></label>
+    <label class="field">{{t "c.end"}} <input type="datetime-local" name="end" value="{{inputdt .NowInput}}" required></label>
+    <label class="field">{{t "c.pc"}} <input name="host" list="hosts"></label>
+    <label class="field">{{t "c.reason"}} <input name="reason" placeholder="{{t "c.reason_ph"}}" required></label>
+    <button class="btn primary">{{t "c.add"}}</button>
   </form>
 </section>
 {{end}}
 
 {{if .Corrections}}
+<section class="card">
 <h2>{{t "student.corrections"}}</h2>
-<div class="scroll">
-<table>
-  <thead><tr><th>{{t "c.when"}}</th><th>{{t "c.who"}}</th><th>{{t "c.what"}}</th><th>{{t "c.start"}}</th><th>{{t "c.end"}}</th><th>{{t "c.pc"}}</th><th>{{t "c.reason"}}</th></tr></thead>
+<div class="table-wrap">
+<table class="list">
+  <thead><tr><th><span class="th">{{t "c.when"}}</span></th><th><span class="th">{{t "c.who"}}</span></th><th><span class="th">{{t "c.what"}}</span></th><th><span class="th">{{t "c.start"}}</span></th><th><span class="th">{{t "c.end"}}</span></th><th><span class="th">{{t "c.pc"}}</span></th><th><span class="th">{{t "c.reason"}}</span></th></tr></thead>
   <tbody>
   {{range .Corrections}}
   <tr><td>{{dt .Created}}</td><td>{{.Actor}}</td><td>{{t (printf "corr.%s" .Action)}} <small class="muted">{{.Target}}</small></td>
@@ -143,6 +222,7 @@
   </tbody>
 </table>
 </div>
+</section>
 {{end}}
 {{end}}
 {{end}}

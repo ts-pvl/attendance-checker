@@ -18,32 +18,13 @@ import (
 	"attendance/internal/i18n"
 )
 
-// The analytics dashboard ("new UI"). It is read-only and sits next to the
-// existing admin pages; the switch in both headers moves between them and
-// remembers the choice in a cookie.
+// The analytics dashboard: the first tab of the admin UI, read-only and
+// open to teachers.
 
-const (
-	uiCookie    = "att_ui"
-	dashMaxDays = 366
-)
+const dashMaxDays = 366
 
-// home is where "/admin/" and a fresh login go: the UI used last.
-func (s *Server) home(r *http.Request) string {
-	if c, err := r.Cookie(uiCookie); err == nil && c.Value == "new" {
-		return "/admin/dashboard"
-	}
-	return "/admin/today"
-}
-
-func (s *Server) handleUISwitch(w http.ResponseWriter, r *http.Request) {
-	which, dest := "old", "/admin/today"
-	if r.PathValue("which") == "new" {
-		which, dest = "new", "/admin/dashboard"
-	}
-	http.SetCookie(w, &http.Cookie{Name: uiCookie, Value: which, Path: "/admin", MaxAge: 365 * 24 * 3600,
-		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil})
-	http.Redirect(w, r, dest, http.StatusSeeOther)
-}
+// home is where "/admin/" and a fresh login go.
+func (s *Server) home(*http.Request) string { return "/admin/dashboard" }
 
 // dateRange reads an inclusive range of local dates (YYYY-MM-DD) from
 // q[fromKey] and q[toKey]. A missing or invalid end comes from def (whose To

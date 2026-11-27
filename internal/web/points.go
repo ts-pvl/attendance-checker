@@ -45,10 +45,10 @@ func (s *Server) handlePointsPresent(w http.ResponseWriter, r *http.Request) {
 	points := formPoints(r)
 	n, err := core.AwardPresent(r.Context(), s.DB, s.Now(), points, r.PostFormValue("reason"), staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/today", s.coreError(err), true)
+		back(w, r, "/admin/today", s.coreError(err), true)
 		return
 	}
-	back(w, r, "/admin/new/today", s.t("points.added_present", points, n), false)
+	back(w, r, "/admin/today", s.t("points.added_present", points, n), false)
 }
 
 func (s *Server) handlePointsStudent(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func (s *Server) handlePointsStudent(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	dest := fmt.Sprintf("/admin/new/students/%d", id)
+	dest := fmt.Sprintf("/admin/students/%d", id)
 	if err := core.AwardStudent(r.Context(), s.DB, s.Now(), id, formPoints(r), r.PostFormValue("reason"), staffFrom(r).Username); err != nil {
 		back(w, r, dest, s.coreError(err), true)
 		return
@@ -73,10 +73,10 @@ func (s *Server) handlePointsCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	student, err := core.CancelPoints(r.Context(), s.DB, s.Now(), id, staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/students", s.coreError(err), true)
+		back(w, r, "/admin/students", s.coreError(err), true)
 		return
 	}
-	back(w, r, fmt.Sprintf("/admin/new/students/%d", student), s.t("points.cancelled_one"), false)
+	back(w, r, fmt.Sprintf("/admin/students/%d", student), s.t("points.cancelled_one"), false)
 }
 
 func (s *Server) handlePointsBatchCancel(w http.ResponseWriter, r *http.Request) {
@@ -87,8 +87,8 @@ func (s *Server) handlePointsBatchCancel(w http.ResponseWriter, r *http.Request)
 	}
 	n, err := core.CancelBatch(r.Context(), s.DB, s.Now(), id, staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/today", s.coreError(err), true)
+		back(w, r, "/admin/today", s.coreError(err), true)
 		return
 	}
-	back(w, r, "/admin/new/today", s.t("points.cancelled_batch", n), false)
+	back(w, r, "/admin/today", s.t("points.cancelled_batch", n), false)
 }

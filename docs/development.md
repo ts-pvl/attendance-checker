@@ -83,24 +83,25 @@ and `ADMIN_PASSWORD` can be overridden the same way.
 * **Hours** are computed from visits plus staff corrections. Corrections never
   overwrite raw rows. Overlaps are merged and visits are split at midnight.
   Rounding, a minimum visit length and a daily cap are configurable, and all
-  are off by default. The Hours screen, the student page, the bot and the CSV
+  are off by default. The Hours tab, the student page, the bot and the CSV
   export all use the same query.
-* **Admin UI** has two interfaces, switched at the top right. The *Dashboard*
-  shows charts, the attendance matrix, a sortable student table, and the
-  Students, Anomalies and Journal tabs. The older *Admin* pages have Today,
-  Hours, Students, Anomalies and Audit log. Teachers can read; admins can also
-  change data. Staff instructions are in [staff-runbook.md](staff-runbook.md).
+* **Admin UI** has the tabs Dashboard (charts, the attendance matrix, a
+  sortable student table), Today, Hours, Students, Anomalies, Peer help,
+  Platform and Journal. Teachers can read; admins can also change data. Staff
+  instructions are in [staff-runbook.md](staff-runbook.md).
 
 ## Build and test
 
-Go 1.26+ (the module pins `toolchain go1.27.3`; older `go` commands download it).
+Go 1.26+ (the module pins `toolchain go1.27.4`; older `go` commands download it).
 
 ```bash
 make test          # unit, scenario, security and replay tests
 make race          # same with the race detector
 make load          # 50 PCs × 20 heartbeats + a burst of 50 scans
 make fuzz          # fuzz the token parser for 60 s
-make check         # vet, staticcheck, govulncheck, gosec, shellcheck, race
+make smoke         # build, start the server and use it as a PC and as staff
+make check         # what CI runs: vet, staticcheck, shellcheck, race, smoke
+make vuln          # known vulnerabilities (CI reports them without failing)
 make pi            # dist/attendance-linux-arm64 (pi32 / amd64 for other targets)
 ```
 

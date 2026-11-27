@@ -1,7 +1,7 @@
 {{define "content"}}
 {{with .D}}
 <h1>{{t "audit.title"}}</h1>
-<form method="get" action="/admin/new/journal" class="filters" data-autosubmit>
+<form method="get" action="/admin/journal" class="filters" data-autosubmit>
   {{template "per-select" (perSelect "per" .PerOpts)}}
   <noscript><button class="btn">{{t "c.show"}}</button></noscript>
 </form>
@@ -13,7 +13,7 @@
   <tbody>
   {{range .Rows}}
   <tr><td>{{dt .At}}</td><td>{{.Actor}}</td><td>{{.Action}}</td>
-    <td>{{if hasStudent .Target}}<a href="/admin/new/students/{{studentID .Target}}">{{.Target}}</a>{{else}}{{.Target}}{{end}}</td>
+    <td>{{if hasStudent .Target}}<a href="/admin/students/{{studentID .Target}}">{{.Target}}</a>{{else}}{{.Target}}{{end}}</td>
     <td class="mono small wrap">{{.Details}}</td></tr>
   {{end}}
   </tbody>

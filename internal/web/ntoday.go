@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"attendance/internal/bot"
 	"attendance/internal/core"
 	"attendance/internal/dash"
 	"attendance/internal/hours"
@@ -39,6 +40,22 @@ type pcTile struct {
 	Student   string
 	For       time.Duration // busy: since the check-in; login: since the login; free: since the last session ended
 	Known     bool          // free: the PC has had a session before
+	Stale     bool          // busy or login: no heartbeat for more than staleAfter
+	LastSeen  time.Time     // busy or login: the last event from the PC
+}
+
+// staleAfter: a PC session with no event for this long (two missed
+// heartbeats and a margin) is flagged on the Today tab.
+const staleAfter = 150 * time.Second
+
+// todayStatus is the health of the system: is everything still talking to
+// the server?
+type todayStatus struct {
+	LastHeartbeat time.Time   // the last event from any PC
+	LastScan      time.Time   // the last check-in
+	Bot           *bot.Status // nil when the bot is disabled
+	OpenVisits    int
+	Stale         int // PCs with a session but no recent heartbeat
 }
 
 type recentRow struct {
@@ -46,6 +63,7 @@ type recentRow struct {
 	Student core.Student
 	Len     time.Duration
 	End     time.Time
+	Reason  string // why the visit ended (core.Reason…)
 }
 
 // recentSorts: the sortable columns of the table, ascending, and whether the
@@ -112,9 +130,9 @@ func (o recentOpts) url(page int) string {
 		q.Set("page", strconv.Itoa(page))
 	}
 	if len(q) == 0 {
-		return "/admin/new/today"
+		return "/admin/today"
 	}
-	return "/admin/new/today?" + q.Encode()
+	return "/admin/today?" + q.Encode()
 }
 
 type recentView struct {
@@ -137,15 +155,16 @@ type nTodayData struct {
 	Table                 recentView
 	Batches               []core.PointsBatch // points given to everyone present today
 	MaxPoints             int
+	Status                todayStatus
 }
 
-func (s *Server) handleNewToday(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleToday(w http.ResponseWriter, r *http.Request) {
 	d, err := s.newToday(r.Context(), parseRecentOpts(r.URL.Query()))
 	if err != nil {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, r, http.StatusOK, "ntoday", d)
+	s.render(w, r, http.StatusOK, "today", d)
 }
 
 func (s *Server) hostNames() []string {
@@ -185,18 +204,20 @@ func (s *Server) newToday(ctx context.Context, o recentOpts) (*nTodayData, error
 	// them, and when each PC's last session ended.
 	tiles := map[string]pcTile{}
 	bySession := map[int64]string{}
-	rows, err := s.DB.QueryContext(ctx, "SELECT id, host, started_at FROM sessions WHERE ended_at IS NULL")
+	rows, err := s.DB.QueryContext(ctx, "SELECT id, host, started_at, last_seen_at FROM sessions WHERE ended_at IS NULL")
 	if err != nil {
 		return nil, err
 	}
+	lastSeen := map[string]time.Time{}
 	for rows.Next() {
-		var id, started int64
+		var id, started, seen int64
 		var host string
-		if err := rows.Scan(&id, &host, &started); err != nil {
+		if err := rows.Scan(&id, &host, &started, &seen); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		bySession[id] = host
+		lastSeen[host] = store.FromMs(seen)
 		tiles[host] = pcTile{State: pcLogin, For: since(now, store.FromMs(started))}
 	}
 	rows.Close()
@@ -215,6 +236,7 @@ func (s *Server) newToday(ctx context.Context, o recentOpts) (*nTodayData, error
 			rows.Close()
 			return nil, err
 		}
+		d.Status.OpenVisits++
 		if host, ok := bySession[sid]; ok {
 			t.For = since(now, store.FromMs(at))
 			tiles[host] = t
@@ -260,6 +282,13 @@ func (s *Server) newToday(ctx context.Context, o recentOpts) (*nTodayData, error
 					}
 				}
 				t.Host = host
+				if live {
+					t.LastSeen = lastSeen[host]
+					t.Stale = now.Sub(t.LastSeen) > staleAfter
+					if t.Stale {
+						d.Status.Stale++
+					}
+				}
 				switch t.State {
 				case pcBusy:
 					d.Busy++
@@ -283,7 +312,31 @@ func (s *Server) newToday(ctx context.Context, o recentOpts) (*nTodayData, error
 		return nil, err
 	}
 	d.MaxPoints = core.MaxPoints
+	if err := s.loadTodayStatus(ctx, &d.Status); err != nil {
+		return nil, err
+	}
 	return d, nil
+}
+
+func (s *Server) loadTodayStatus(ctx context.Context, st *todayStatus) error {
+	var lastHB, lastScan sql.NullInt64
+	if err := s.DB.QueryRowContext(ctx, "SELECT MAX(last_seen_at) FROM sessions").Scan(&lastHB); err != nil {
+		return err
+	}
+	if err := s.DB.QueryRowContext(ctx, "SELECT MAX(confirmed_at) FROM presence").Scan(&lastScan); err != nil {
+		return err
+	}
+	if lastHB.Valid {
+		st.LastHeartbeat = store.FromMs(lastHB.Int64)
+	}
+	if lastScan.Valid {
+		st.LastScan = store.FromMs(lastScan.Int64)
+	}
+	if s.Bot != nil {
+		b := s.Bot.Status()
+		st.Bot = &b
+	}
+	return nil
 }
 
 func since(now, t time.Time) time.Duration { return max(now.Sub(t), 0) }
@@ -319,7 +372,7 @@ func (s *Server) recentSessions(ctx context.Context, now time.Time, o recentOpts
 			continue
 		}
 		st.ID = vis.StudentID
-		list = append(list, &recentRow{Host: vis.Host, Student: st, Len: vis.Duration(), End: vis.End})
+		list = append(list, &recentRow{Host: vis.Host, Student: st, Len: vis.Duration(), End: vis.End, Reason: vis.EndReason})
 	}
 	by := recentSorts[o.Sort].cmp
 	slices.SortStableFunc(list, func(a, b *recentRow) int {
@@ -346,7 +399,7 @@ func (s *Server) recentSessions(ctx context.Context, now time.Time, o recentOpts
 	for _, h := range []struct {
 		key, label string
 		num        bool
-	}{{"pc", "c.pc", false}, {"", "c.student", false}, {"", "c.group", false}, {"len", "ntoday.col_len", true}, {"ago", "ntoday.col_ago", true}} {
+	}{{"pc", "c.pc", false}, {"", "c.student", false}, {"", "c.group", false}, {"len", "ntoday.col_len", true}, {"ago", "ntoday.col_ago", true}, {"", "c.ended", false}} {
 		head := tableHead{Key: h.key, Label: s.t(h.label), Num: h.num}
 		if h.key != "" {
 			next := o
@@ -427,5 +480,5 @@ func (s *Server) handleTodayLayout(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, err)
 		return
 	}
-	back(w, r, "/admin/new/today", problem, problem != "")
+	back(w, r, "/admin/today", problem, problem != "")
 }

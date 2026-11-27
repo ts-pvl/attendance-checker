@@ -1,4 +1,4 @@
-/* Analytics dashboard ("new UI"). Dark by default on dark systems; the ◐
+/* Admin UI. Dark by default on dark systems; the ◐
    button stores a choice in localStorage (theme.js applies it early). */
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f0f2f5; --line: #e2e5ea;
@@ -49,9 +49,6 @@ h2 { font-size: 13px; margin: 0; font-weight: 650; }
 .dh-brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
 .dh-right { display: flex; align-items: center; gap: 8px; }
 .dh-right form { margin: 0; }
-.ui-switch { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
-.ui-switch a { padding: 4px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 12px; }
-.ui-switch a[aria-current="page"] { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
 button.icon, button.plain {
   background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 6px;
 }
@@ -185,14 +182,14 @@ svg.hbar rect.track { fill: var(--panel-2); }
   .tools input[type=search] { width: 140px; }
 }
 
-/* ---- new UI: tabs, pages ported from the old admin UI ---- */
+/* ---- tabs and the admin pages ---- */
 .dh { flex-wrap: wrap; }
 .tabs { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; margin-right: auto; margin-left: 24px; }
 .tabs a { padding: 4px 12px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 12px; }
 .tabs a:hover { color: var(--text); }
 .tabs a[aria-current="page"] { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
-.old-ui { font-size: 12px; color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 6px; }
-.old-ui:hover { color: var(--text); background: var(--panel-2); }
+.dh-right .who { font-size: 12px; }
+@media (max-width: 640px) { .dh-right .who { display: none; } }
 .flash { background: var(--ok-bg); color: var(--ok); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
 .flash.err { background: var(--gone-bg); color: var(--gone); }
 .crumbs { margin: 0 0 6px; font-size: 12px; }
@@ -235,7 +232,7 @@ table.list tr.deleted td { opacity: .5; text-decoration: line-through; }
 .period { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
 .days { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; margin: 0 0 10px; }
 .days small { color: var(--muted); }
-#nstudents.htmx-request, #matrix-block.htmx-request { opacity: .55; transition: opacity .15s; }
+#students-list.htmx-request, #matrix-block.htmx-request { opacity: .55; transition: opacity .15s; }
 .c-head .tools form { display: flex; gap: 8px; align-items: center; margin: 0; flex-wrap: wrap; }
 .c-head .tools .date { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; font-size: 12px; color: var(--muted); }
 .c-head .tools .date input { background: none; border: 0; color: var(--text); font: inherit; font-size: 12px; }
@@ -311,3 +308,19 @@ table.list tr.deleted td { opacity: .5; text-decoration: line-through; }
 .c-head .tools form { margin: 0; }
 button.btn[disabled] { opacity: .5; cursor: default; }
 .login-input { width: 140px; }
+
+/* ---- login ---- */
+.card.login { max-width: 360px; margin: 48px auto; padding: 22px 24px; }
+.card.login h1 { margin-bottom: 14px; }
+.card.login .stack label input { min-width: 0; width: 100%; }
+.card.login .stack label { width: 100%; }
+
+/* ---- Today: system status, PCs that stopped answering ---- */
+.today-status { margin-bottom: 12px; }
+.kpi.warn .k-value, .kpi.warn .k-sub { color: var(--gone); }
+.pc.stale { border-style: dashed; border-color: var(--gone); }
+.pc-stale { display: inline-block !important; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--gone-bg); color: var(--gone); font-weight: 700; }
+
+/* ---- Students: search, filters, export ---- */
+.filters input[type=search] { width: 220px; }
+@media (max-width: 640px) { .filters input[type=search] { width: 150px; } }

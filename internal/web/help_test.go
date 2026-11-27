@@ -62,22 +62,22 @@ func TestHelpWeb(t *testing.T) {
 		"2,Smith Anna,asmith,jdoe,mlee,xyzq,\n" +
 		"3,Ким Борис,bkim,asmiht,jdoe,,\n"
 
-	if b := get(admin, "/admin/new/help"); !strings.Contains(b, "No week has been imported yet.") || !strings.Contains(b, `name="week" value="2026-03-02"`) {
+	if b := get(admin, "/admin/help"); !strings.Contains(b, "No week has been imported yet.") || !strings.Contains(b, `name="week" value="2026-03-02"`) {
 		t.Error("empty page, or the default week is not last week's Monday")
 	}
 	// No platform: no advice about loading its participants.
-	if b := get(admin, "/admin/new/help"); strings.Contains(b, "Load all participants") {
+	if b := get(admin, "/admin/help"); strings.Contains(b, "Load all participants") {
 		t.Error("cohort advice without a platform")
 	}
 	ts.s.Cfg.PlatformURL = "https://01.example.org"
-	if b := get(admin, "/admin/new/help"); !strings.Contains(b, "Load all participants of the current piscine") {
+	if b := get(admin, "/admin/help"); !strings.Contains(b, "Load all participants of the current piscine") {
 		t.Error("no advice to load the cohort")
 	}
 	ts.s.DB.Exec("INSERT INTO settings(key, value) VALUES('platform_events', '10')")
-	if b := get(admin, "/admin/new/help"); strings.Contains(b, "Load all participants") {
+	if b := get(admin, "/admin/help"); strings.Contains(b, "Load all participants") {
 		t.Error("cohort advice with an event loaded")
 	}
-	if b := get(teach, "/admin/new/help"); strings.Contains(b, "/admin/help/import") {
+	if b := get(teach, "/admin/help"); strings.Contains(b, "/admin/help/import") {
 		t.Error("teacher sees the import form")
 	}
 	if w := ts.upload(teach, teachCSRF, "/admin/help/import", "2026-03-11", "a.csv", csv); w.Code != http.StatusForbidden {
@@ -91,10 +91,10 @@ func TestHelpWeb(t *testing.T) {
 	}
 	// Wednesday the 11th belongs to the week of Monday the 9th.
 	w := ts.upload(admin, csrf, "/admin/help/import", "2026-03-11", "week1.csv", csv)
-	if msg, isErr := flashOf(w); isErr || msg != "3 answers imported for the week of 2026-03-09." || w.Header().Get("Location") != "/admin/new/help?week=2026-03-09" {
+	if msg, isErr := flashOf(w); isErr || msg != "3 answers imported for the week of 2026-03-09." || w.Header().Get("Location") != "/admin/help?week=2026-03-09" {
 		t.Errorf("import: %q %s", msg, w.Header().Get("Location"))
 	}
-	body := get(admin, "/admin/new/help?week=2026-03-09")
+	body := get(admin, "/admin/help?week=2026-03-09")
 	order := func(b string) string {
 		var out []string
 		for _, part := range strings.Split(b, `<td class="mono">`)[1:] {
@@ -107,7 +107,7 @@ func TestHelpWeb(t *testing.T) {
 		t.Errorf("order: %s", got)
 	}
 	for _, want := range []string{"3 answers, 3 counted", "· 6 mentions counted · 1 unresolved",
-		`<a class="name" href="/admin/new/students/2">Smith Anna</a>`, "Ли Мария <span class=\"pill\">not a student here</span>",
+		`<a class="name" href="/admin/students/2">Smith Anna</a>`, "Ли Мария <span class=\"pill\">not a student here</span>",
 		"typo, corrected:</span> <span class=\"mono\">asmith</span>", `<span class="pill warn">not counted</span>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page lacks %q", want)
@@ -116,7 +116,7 @@ func TestHelpWeb(t *testing.T) {
 	if strings.Contains(body, "спасибо") {
 		t.Error("a comment was kept")
 	}
-	if got := order(get(admin, "/admin/new/help?week=2026-03-09&group=A")); got != "jdoe bkim xyzq asmiht" {
+	if got := order(get(admin, "/admin/help?week=2026-03-09&group=A")); got != "jdoe bkim xyzq asmiht" {
 		t.Errorf("group A: %s", got)
 	}
 	// Staff resolve "xyzq" as bkim: bkim is named twice.
@@ -125,16 +125,16 @@ func TestHelpWeb(t *testing.T) {
 		t.Errorf("alias to an unknown login: %q", msg)
 	}
 	ts.do(req{method: "POST", path: "/admin/help/alias", ip: staffIP, cookie: admin, form: url.Values{"csrf": {csrf}, "typed": {"xyzq"}, "login": {"BKIM"}}})
-	if got := order(get(admin, "/admin/new/help?week=2026-03-09")); got != "asmith bkim jdoe mlee xyzq asmiht" {
+	if got := order(get(admin, "/admin/help?week=2026-03-09")); got != "asmith bkim jdoe mlee xyzq asmiht" {
 		t.Errorf("after the alias: %s", got)
 	}
 	// Another week (the 2nd): bkim names jdoe. All weeks: jdoe 3.
 	ts.upload(admin, csrf, "/admin/help/import", "2026-03-02", "week0.csv", "Login,Peer #1\nbkim,jdoe\n")
-	all := get(admin, "/admin/new/help?week=all")
+	all := get(admin, "/admin/help?week=all")
 	if got := order(all); got != "jdoe asmith bkim mlee" || strings.Contains(all, "This week") {
 		t.Errorf("all weeks: %s", got)
 	}
-	if b := get(teach, "/admin/new/students/1"); !strings.Contains(b, "3 times in all weeks") || !strings.Contains(b, `href="/admin/new/help?week=2026-03-09"`) {
+	if b := get(teach, "/admin/students/1"); !strings.Contains(b, "3 times in all weeks") || !strings.Contains(b, `href="/admin/help?week=2026-03-09"`) {
 		t.Error("student page")
 	}
 	// Re-import replaces; delete removes.
@@ -144,7 +144,7 @@ func TestHelpWeb(t *testing.T) {
 	if msg, _ := flashOf(ts.do(req{method: "POST", path: "/admin/help/delete", ip: staffIP, cookie: admin, form: url.Values{"csrf": {csrf}, "week": {"2026-03-02"}}})); msg != "The week is deleted." {
 		t.Errorf("delete: %q", msg)
 	}
-	if b := get(admin, "/admin/new/help"); strings.Contains(b, "Week of 2026-03-02") || !strings.Contains(b, "Week of 2026-03-09") {
+	if b := get(admin, "/admin/help"); strings.Contains(b, "Week of 2026-03-02") || !strings.Contains(b, "Week of 2026-03-09") {
 		t.Error("weeks after the delete")
 	}
 	var journal int

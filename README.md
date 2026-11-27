@@ -23,6 +23,7 @@ A web page (the admin UI), open only inside the school network:
 
 * who is checked in right now and on which computer;
 * hours of every student per day, week and month, with export to a spreadsheet (CSV);
+* the student list, with search by name, a filter for who has linked Telegram, and export to CSV;
 * charts of attendance, an attendance table by day, and a list of unusual visits;
 * points for social activities, for everyone present or for one student;
 * students' levels, XP and audit ratio from the learning platform, by their platform logins;

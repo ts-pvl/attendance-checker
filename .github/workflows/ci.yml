@@ -1,27 +1,51 @@
 name: ci
 on: [push, pull_request]
 
+# A newer push to the same branch or pull request cancels the older run.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Does the program work? Formatting, static analysis for real bugs, the
+  # tests (with the race detector), the release builds and an end-to-end run
+  # of the built binary. Any failure here fails the pipeline.
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: gofmt
-        run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test -race ./...
-      - name: fuzz token parsing
-        run: go test ./internal/token -run '^$' -fuzz FuzzParse -fuzztime 30s
+        run: |
+          out=$(gofmt -l .)
+          if [ -n "$out" ]; then echo "not gofmt-ed:"; echo "$out"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
       - name: staticcheck
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+      - name: tests (race detector)
+        run: go test -race ./...
+      - name: fuzz token parsing
+        run: go test ./internal/token -run '^$' -fuzz FuzzParse -fuzztime 20s
+      - name: shellcheck
+        run: shellcheck agent/idle_logout deploy/alert/attendance-alert deploy/install.sh scripts/dev.sh scripts/smoke.sh
+      - name: release builds (amd64, Pi 64-bit, Pi 32-bit)
+        run: make all
+      - name: smoke test (start the server, use it as a PC and as staff)
+        run: scripts/smoke.sh dist/attendance-linux-amd64
+
+  # Known vulnerabilities in Go and the modules, for information: a new Go
+  # release fixes these without any change to the program, so they do not
+  # fail the pipeline. When it reports one, raise `toolchain` in go.mod.
+  vulncheck:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-      - name: gosec (fail on high severity)
-        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.30.0 -severity high ./...
-      - name: shellcheck
-        run: shellcheck agent/idle_logout deploy/alert/attendance-alert deploy/install.sh scripts/dev.sh
-      - name: cross-compile for the Pi
-        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/attendance

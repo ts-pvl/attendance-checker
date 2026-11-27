@@ -214,7 +214,7 @@ func (s *Server) syncer() *platform.Syncer {
 	return s.Platform
 }
 
-func (s *Server) handleNewPlatform(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePlatform(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 	d := &nPlatformData{URL: s.syncer().Base, HasToken: s.syncer().HasToken(), SyncEvery: s.Cfg.PlatformSyncEvery, Show: q.Get("show")}
@@ -288,9 +288,9 @@ func (s *Server) handleNewPlatform(w http.ResponseWriter, r *http.Request) {
 			v.Set("page", strconv.Itoa(page))
 		}
 		if len(v) == 0 {
-			return "/admin/new/platform"
+			return "/admin/platform"
 		}
-		return "/admin/new/platform?" + v.Encode()
+		return "/admin/platform?" + v.Encode()
 	}
 	pg, lo, hi := paginate(len(list), parsePage(q.Get("page")), per, func(p int) string { return link(d.Sort, d.Dir, p) })
 	d.Pager = pg
@@ -312,7 +312,7 @@ func (s *Server) handleNewPlatform(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Heads = append(d.Heads, head)
 	}
-	s.render(w, r, http.StatusOK, "nplatform", d)
+	s.render(w, r, http.StatusOK, "platform", d)
 }
 
 func (s *Server) platformError(err error) string {
@@ -336,10 +336,10 @@ func (s *Server) platformError(err error) string {
 func (s *Server) handlePlatformSettings(w http.ResponseWriter, r *http.Request) {
 	err := s.syncer().SaveSettings(r.Context(), s.Now(), r.PostFormValue("events"), r.PostFormValue("token"), staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/platform", s.platformError(err), true)
+		back(w, r, "/admin/platform", s.platformError(err), true)
 		return
 	}
-	back(w, r, "/admin/new/platform", s.t("plat.saved"), false)
+	back(w, r, "/admin/platform", s.t("plat.saved"), false)
 }
 
 // handlePlatformEvent starts or stops reading all participants of an event.
@@ -350,10 +350,10 @@ func (s *Server) handlePlatformEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	on := r.PostFormValue("load") == "1"
 	if err := s.syncer().SetEvent(r.Context(), s.Now(), id, on, staffFrom(r).Username); err != nil {
-		back(w, r, "/admin/new/platform", s.platformError(err), true)
+		back(w, r, "/admin/platform", s.platformError(err), true)
 		return
 	}
-	back(w, r, "/admin/new/platform", s.t("plat.event_saved"), false)
+	back(w, r, "/admin/platform", s.t("plat.event_saved"), false)
 }
 
 func (s *Server) handlePlatformSync(w http.ResponseWriter, r *http.Request) {
@@ -361,24 +361,24 @@ func (s *Server) handlePlatformSync(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	res, err := s.syncer().Sync(ctx, s.Now(), staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/platform", s.platformError(err), true)
+		back(w, r, "/admin/platform", s.platformError(err), true)
 		return
 	}
 	msg := s.t("plat.synced", res.Users, res.Linked)
 	if len(res.Warnings) > 0 {
 		msg += " " + strings.Join(res.Warnings, "; ")
 	}
-	back(w, r, "/admin/new/platform", msg, len(res.Warnings) > 0)
+	back(w, r, "/admin/platform", msg, len(res.Warnings) > 0)
 }
 
 func (s *Server) handlePlatformLink(w http.ResponseWriter, r *http.Request) {
 	links, err := platform.LinkByName(r.Context(), s.DB, s.Now(), staffFrom(r).Username)
 	if err != nil {
-		back(w, r, "/admin/new/platform", s.coreError(err), true)
+		back(w, r, "/admin/platform", s.coreError(err), true)
 		return
 	}
 	if len(links) == 0 {
-		back(w, r, "/admin/new/platform", s.t("plat.linked_none"), false)
+		back(w, r, "/admin/platform", s.t("plat.linked_none"), false)
 		return
 	}
 	var names []string
@@ -389,5 +389,5 @@ func (s *Server) handlePlatformLink(w http.ResponseWriter, r *http.Request) {
 	if len(links) > 5 {
 		msg += fmt.Sprintf(" (+%d)", len(links)-5)
 	}
-	back(w, r, "/admin/new/platform", msg, false)
+	back(w, r, "/admin/platform", msg, false)
 }

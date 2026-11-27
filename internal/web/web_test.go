@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -200,8 +202,8 @@ func TestQRPage(t *testing.T) {
 
 func TestAdminAccess(t *testing.T) {
 	ts := newTestServer(t)
-	pages := []string{"/admin/today", "/admin/hours", "/admin/hours.csv", "/admin/students", "/admin/students/slips", "/admin/anomalies", "/admin/audit",
-		"/admin/dashboard", "/admin/dashboard.csv"}
+	pages := []string{"/admin/today", "/admin/hours", "/admin/hours.csv", "/admin/students", "/admin/students.csv", "/admin/students/slips",
+		"/admin/anomalies", "/admin/journal", "/admin/help", "/admin/platform", "/admin/dashboard", "/admin/dashboard.csv"}
 	for _, p := range pages {
 		if w := ts.do(req{method: "GET", path: p, ip: staffIP}); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/login" {
 			t.Errorf("%s without login: %d %s", p, w.Code, w.Header().Get("Location"))
@@ -243,7 +245,7 @@ func TestAdminAccess(t *testing.T) {
 	if got := add(teacher, teacherCSRF); got != 403 {
 		t.Errorf("teacher writes: %d", got)
 	}
-	if w := ts.do(req{method: "GET", path: "/admin/audit", ip: staffIP, cookie: teacher}); w.Code != 403 {
+	if w := ts.do(req{method: "GET", path: "/admin/journal", ip: staffIP, cookie: teacher}); w.Code != 403 {
 		t.Errorf("teacher reads audit log: %d", w.Code)
 	}
 	// Session idle timeout.
@@ -359,9 +361,9 @@ func TestPagesRenderWithData(t *testing.T) {
 		Start: ts.now.Add(-2 * time.Hour), End: ts.now.Add(-time.Hour), Reason: "no phone", Actor: "boss"})
 	core.GenerateCode(ctx, ts.s.DB, ts.now, 1, time.Hour, "boss")
 	admin, _ := ts.login("boss")
-	for _, p := range []string{"/admin/today", "/admin/today/live", "/admin/hours?period=day", "/admin/hours?period=week",
-		"/admin/hours?period=month&empty=1", "/admin/students", "/admin/students/1", "/admin/students/slips",
-		"/admin/anomalies", "/admin/audit", "/admin/hours.csv?period=week"} {
+	for _, p := range []string{"/admin/today", "/admin/hours?period=day", "/admin/hours?period=week",
+		"/admin/hours?period=month&empty=1", "/admin/hours?period=week&per=all&page=3", "/admin/students", "/admin/students/1",
+		"/admin/students/slips", "/admin/anomalies", "/admin/journal", "/admin/hours.csv?period=week"} {
 		w := ts.do(req{method: "GET", path: p, ip: staffIP, cookie: admin})
 		if w.Code != 200 {
 			t.Errorf("%s: %d %s", p, w.Code, w.Body)
@@ -370,6 +372,27 @@ func TestPagesRenderWithData(t *testing.T) {
 	w := ts.do(req{method: "GET", path: "/admin/hours.csv?period=day", ip: staffIP, cookie: admin})
 	if !strings.Contains(w.Body.String(), "Alice,A,day,2026-03-10,2026-03-10,60,1.00,1") {
 		t.Errorf("CSV:\n%s", w.Body)
+	}
+	lang := ts.s.Cfg.Lang
+	// The student page's period arrows keep both parameters.
+	body := ts.do(req{method: "GET", path: "/admin/students/1", ip: staffIP, cookie: admin}).Body.String()
+	if !strings.Contains(body, `href="/admin/students/1?date=2026-02-01&amp;period=month"`) || !strings.Contains(body, `href="/admin/students/1?date=2026-04-01&amp;period=month"`) {
+		t.Error("student page: month links")
+	}
+	// Today: the system status (no bot in the tests) above the PC grid.
+	body = ts.do(req{method: "GET", path: "/admin/today", ip: staffIP, cookie: admin}).Body.String()
+	for _, want := range []string{i18n.T(lang, "today.last_heartbeat"), i18n.T(lang, "today.last_scan"), i18n.T(lang, "today.bot_off"), i18n.T(lang, "today.open_visits")} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Today lacks %q", want)
+		}
+	}
+	// Hours: Alice's hour, the rules and the CSV link of the same period.
+	body = ts.do(req{method: "GET", path: "/admin/hours?period=day", ip: staffIP, cookie: admin}).Body.String()
+	for _, want := range []string{">Alice</a>", i18n.T(lang, "hours.policy_exact"), `href="/admin/hours.csv?date=2026-03-10&amp;period=day"`,
+		`href="/admin/hours?date=2026-03-09&amp;period=day"`, `href="/admin/hours?date=2026-03-11&amp;period=day"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Hours lacks %q", want)
+		}
 	}
 }
 
@@ -415,42 +438,43 @@ func TestDashboard(t *testing.T) {
 	}
 }
 
-func TestUISwitch(t *testing.T) {
+// There is one admin UI: /admin/ and a fresh login go to the dashboard, and
+// the addresses of the former second UI lead to the same pages.
+func TestStartPageAndOldAddresses(t *testing.T) {
 	ts := newTestServer(t)
 	admin, _ := ts.login("boss")
-	if w := ts.do(req{method: "GET", path: "/admin/today", ip: staffIP, cookie: admin}); !strings.Contains(w.Body.String(), `href="/admin/ui/new"`) {
-		t.Error("old UI has no switch to the dashboard")
+	if w := ts.do(req{method: "GET", path: "/admin/", ip: staffIP, cookie: admin}); w.Header().Get("Location") != "/admin/dashboard" {
+		t.Errorf("start page: %s", w.Header().Get("Location"))
 	}
-	if w := ts.do(req{method: "GET", path: "/admin/dashboard", ip: staffIP, cookie: admin}); !strings.Contains(w.Body.String(), `href="/admin/ui/old"`) {
-		t.Error("dashboard has no switch back")
-	}
-	w := ts.do(req{method: "GET", path: "/admin/ui/new", ip: staffIP, cookie: admin})
-	var ui *http.Cookie
-	for _, c := range w.Result().Cookies() {
-		if c.Name == uiCookie {
-			ui = c
-		}
-	}
-	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/dashboard" || ui == nil || ui.Value != "new" || !ui.HttpOnly {
-		t.Fatalf("switch to new: %d %s %+v", w.Code, w.Header().Get("Location"), ui)
-	}
-	// The choice is remembered for /admin/ and the next login.
-	w = ts.do(req{method: "GET", path: "/admin/", ip: staffIP, cookie: admin, header: map[string]string{"Cookie": "att_ui=new"}})
-	if w.Header().Get("Location") != "/admin/dashboard" {
-		t.Errorf("/admin/ after choosing the dashboard: %s", w.Header().Get("Location"))
-	}
-	w = ts.do(req{method: "POST", path: "/admin/login", ip: staffIP, header: map[string]string{"Cookie": "att_ui=new"},
+	w := ts.do(req{method: "POST", path: "/admin/login", ip: staffIP,
 		form: url.Values{"username": {"boss"}, "password": {"correct horse battery"}}})
 	if w.Header().Get("Location") != "/admin/dashboard" {
-		t.Errorf("login after choosing the dashboard: %s", w.Header().Get("Location"))
+		t.Errorf("after login: %s", w.Header().Get("Location"))
 	}
-	w = ts.do(req{method: "GET", path: "/admin/ui/old", ip: staffIP, cookie: admin})
-	if w.Header().Get("Location") != "/admin/today" || !strings.Contains(w.Header().Get("Set-Cookie"), "att_ui=old") {
-		t.Errorf("switch back: %s %s", w.Header().Get("Location"), w.Header().Get("Set-Cookie"))
+	if w := ts.do(req{method: "GET", path: "/", ip: staffIP}); w.Header().Get("Location") != "/admin/" {
+		t.Errorf("/ from a staff PC: %s", w.Header().Get("Location"))
 	}
-	// Without a choice the old UI stays the start page.
-	if w := ts.do(req{method: "GET", path: "/admin/", ip: staffIP, cookie: admin}); w.Header().Get("Location") != "/admin/today" {
-		t.Errorf("default start page: %s", w.Header().Get("Location"))
+	if w := ts.do(req{method: "GET", path: "/admin/dashboard", ip: staffIP, cookie: admin}); strings.Contains(w.Body.String(), "/admin/ui/") ||
+		strings.Contains(w.Body.String(), "/admin/new/") {
+		t.Error("the page still links to the old interface")
+	}
+	for from, to := range map[string]string{
+		"/admin/new/students?group=A&page=2": "/admin/students?group=A&page=2",
+		"/admin/new/students/7":              "/admin/students/7",
+		"/admin/new/journal":                 "/admin/journal",
+		"/admin/new/today":                   "/admin/today",
+		"/admin/ui/old":                      "/admin/dashboard",
+		"/admin/ui/new":                      "/admin/dashboard",
+		"/admin/audit":                       "/admin/journal",
+	} {
+		w := ts.do(req{method: "GET", path: from, ip: staffIP, cookie: admin})
+		if w.Code != http.StatusSeeOther || w.Header().Get("Location") != to {
+			t.Errorf("%s: %d %s, want %s", from, w.Code, w.Header().Get("Location"), to)
+		}
+	}
+	// Old addresses still need a login.
+	if w := ts.do(req{method: "GET", path: "/admin/new/students", ip: staffIP}); w.Header().Get("Location") != "/admin/login" {
+		t.Errorf("old address without login: %s", w.Header().Get("Location"))
 	}
 }
 
@@ -563,11 +587,11 @@ func TestCompareNames(t *testing.T) {
 	}
 }
 
-func TestNewUIPages(t *testing.T) {
+func TestAdminTabs(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	core.AddStudent(ctx, ts.s.DB, ts.now, "Alice", "A", "test")
-	pages := []string{"/admin/new/today", "/admin/new/help", "/admin/new/platform", "/admin/new/students", "/admin/new/students/1", "/admin/new/students/slips", "/admin/new/anomalies", "/admin/new/journal"}
+	pages := []string{"/admin/today", "/admin/hours", "/admin/help", "/admin/platform", "/admin/students", "/admin/students/1", "/admin/students/slips", "/admin/anomalies", "/admin/journal"}
 	for _, p := range pages {
 		if w := ts.do(req{method: "GET", path: p, ip: staffIP}); w.Code != http.StatusSeeOther {
 			t.Errorf("%s without login: %d", p, w.Code)
@@ -576,31 +600,31 @@ func TestNewUIPages(t *testing.T) {
 	admin, _ := ts.login("boss")
 	for _, p := range pages {
 		w := ts.do(req{method: "GET", path: p, ip: staffIP, cookie: admin})
-		if w.Code != 200 || !strings.Contains(w.Body.String(), `href="/admin/ui/old"`) {
-			t.Errorf("%s as admin: %d", p, w.Code)
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `href="/admin/hours"`) || !strings.Contains(w.Body.String(), `href="/admin/journal"`) {
+			t.Errorf("%s as admin: %d, or a tab is missing", p, w.Code)
 		}
 	}
-	if w := ts.do(req{method: "GET", path: "/admin/new/students/99", ip: staffIP, cookie: admin}); w.Code != 404 {
+	if w := ts.do(req{method: "GET", path: "/admin/students/99", ip: staffIP, cookie: admin}); w.Code != 404 {
 		t.Errorf("unknown student: %d", w.Code)
 	}
-	// Teachers read everything but the journal, as in the old UI.
+	// Teachers read everything but the journal.
 	teach, _ := ts.login("teach")
 	for _, p := range pages {
 		want := 200
-		if p == "/admin/new/journal" {
+		if p == "/admin/journal" {
 			want = 403
 		}
 		if w := ts.do(req{method: "GET", path: p, ip: staffIP, cookie: teach}); w.Code != want {
 			t.Errorf("%s as teacher: %d, want %d", p, w.Code, want)
 		}
 	}
-	if w := ts.do(req{method: "GET", path: "/admin/new/students", ip: staffIP, cookie: teach}); strings.Contains(w.Body.String(), "/admin/students/import") ||
-		strings.Contains(w.Body.String(), `href="/admin/new/journal"`) {
+	if w := ts.do(req{method: "GET", path: "/admin/students", ip: staffIP, cookie: teach}); strings.Contains(w.Body.String(), "/admin/students/import") ||
+		strings.Contains(w.Body.String(), `href="/admin/journal"`) {
 		t.Error("teacher sees admin actions or the journal tab")
 	}
 }
 
-func TestNewStudentsList(t *testing.T) {
+func TestStudentsList(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	for _, st := range []struct{ name, group string }{
@@ -611,10 +635,10 @@ func TestNewStudentsList(t *testing.T) {
 	core.GenerateCode(ctx, ts.s.DB, ts.now, 3, time.Hour, "test") // Валиева: link sent
 	core.SetArchived(ctx, ts.s.DB, ts.now, 5, true, "test")       // Гаврилов: archived
 	admin, _ := ts.login("boss")
-	nameRE := regexp.MustCompile(`<a class="name" href="/admin/new/students/\d+"[^>]*>([^<]+)</a>`)
+	nameRE := regexp.MustCompile(`<a class="name" href="/admin/students/\d+"[^>]*>([^<]+)</a>`)
 	list := func(q string) string {
 		t.Helper()
-		w := ts.do(req{method: "GET", path: "/admin/new/students?" + q, ip: staffIP, cookie: admin})
+		w := ts.do(req{method: "GET", path: "/admin/students?" + q, ip: staffIP, cookie: admin})
 		if w.Code != 200 {
 			t.Fatalf("%s: %d", q, w.Code)
 		}
@@ -644,23 +668,133 @@ func TestNewStudentsList(t *testing.T) {
 			t.Errorf("%q: %s, want %s", c.q, got, c.want)
 		}
 	}
-	w := ts.do(req{method: "GET", path: "/admin/new/students?per=3&page=2", ip: staffIP, cookie: admin})
+	w := ts.do(req{method: "GET", path: "/admin/students?per=3&page=2", ip: staffIP, cookie: admin})
 	body := w.Body.String()
 	if !strings.Contains(body, i18n.T(ts.s.Cfg.Lang, "dash.shown", 4, 4, 4)) || !strings.Contains(body, "sort=status") {
 		t.Error("pager text or status sort link missing")
 	}
 }
 
+// The students list is searched by name or login and filtered by whether the
+// student has linked Telegram; the CSV export has the same rows in the same
+// order. All names, logins and Telegram users are invented.
+func TestStudentsSearchAndExport(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := context.Background()
+	for _, st := range []struct{ name, group, login string }{
+		{"Нұрланов Ерлан", "A", "nerlan"}, {"Smith Anna", "B", "asmith"}, {"Ёлкина Мария", "A", ""}, {"Smithson Bob", "A", "bsmith"},
+	} {
+		if _, err := core.AddStudentLogin(ctx, ts.s.DB, ts.now, st.name, st.group, st.login, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Telegram: 1 with a username, 2 without one, 3 has an unused link, 4 nothing.
+	for _, l := range []struct {
+		id int64
+		tg core.TGUser
+	}{{1, core.TGUser{ID: 9001, Username: "erlan_n", Name: "Ерлан"}}, {2, core.TGUser{ID: 9002, Name: "Anna S"}}} {
+		code, _ := core.GenerateCode(ctx, ts.s.DB, ts.now, l.id, time.Hour, "test")
+		if r, err := core.Enroll(ctx, ts.s.DB, ts.now, l.tg, code); err != nil || r.Result != core.EnrollLinked {
+			t.Fatalf("enroll %d: %v %+v", l.id, err, r)
+		}
+	}
+	core.GenerateCode(ctx, ts.s.DB, ts.now, 3, time.Hour, "test")
+	teach, _ := ts.login("teach") // read-only staff may search and export too
+	nameRE := regexp.MustCompile(`<a class="name" href="/admin/students/\d+"[^>]*>([^<]+)</a>`)
+	list := func(q string) string {
+		t.Helper()
+		w := ts.do(req{method: "GET", path: "/admin/students?" + q, ip: staffIP, cookie: teach})
+		if w.Code != 200 {
+			t.Fatalf("%s: %d", q, w.Code)
+		}
+		var names []string
+		for _, m := range nameRE.FindAllStringSubmatch(w.Body.String(), -1) {
+			names = append(names, m[1])
+		}
+		return strings.Join(names, ";")
+	}
+	// Default order: group, then name. A: Ёлкина, Нұрланов, Smithson (Cyrillic first); B: Smith.
+	for q, want := range map[string]string{
+		"":                             "Ёлкина Мария;Нұрланов Ерлан;Smithson Bob;Smith Anna",
+		"q=smith":                      "Smithson Bob;Smith Anna",                             // part of a name, any case
+		"q=SMITHSON":                   "Smithson Bob",                                        //
+		"q=нурланов":                   "Нұрланов Ерлан",                                      // ұ typed as у
+		"q=елкина":                     "Ёлкина Мария",                                        // ё typed as е
+		"q=мария+ёлк":                  "Ёлкина Мария",                                        // every word, any order
+		"q=мария+smith":                "",                                                    // no one has both
+		"q=nerlan":                     "Нұрланов Ерлан",                                      // the platform login
+		"q=bsm":                        "Smithson Bob",                                        // part of a login
+		"q=++":                         "Ёлкина Мария;Нұрланов Ерлан;Smithson Bob;Smith Anna", // blank: everyone
+		"tg=linked":                    "Нұрланов Ерлан;Smith Anna",                           // with or without a username
+		"tg=unlinked":                  "Ёлкина Мария;Smithson Bob",                           // an unused link is not linked
+		"tg=linked&q=smith":            "Smith Anna",                                          //
+		"tg=unlinked&group=B":          "",                                                    //
+		"tg=nonsense":                  "Ёлкина Мария;Нұрланов Ерлан;Smithson Bob;Smith Anna", // ignored
+		"tg=linked&sort=name&dir=desc": "Smith Anna;Нұрланов Ерлан",                           // Latin after Cyrillic, reversed
+	} {
+		if got := list(q); got != want {
+			t.Errorf("%q: %s, want %s", q, got, want)
+		}
+	}
+	// The summary counts the whole group, before the search and the filter.
+	body := ts.do(req{method: "GET", path: "/admin/students?q=smith&tg=linked", ip: staffIP, cookie: teach}).Body.String()
+	if !strings.Contains(body, html.EscapeString(i18n.T(ts.s.Cfg.Lang, "students.summary", 4, 2, 1, 1))) {
+		t.Error("summary should count all four students")
+	}
+	// Paging links and the export link keep the search and the filter.
+	body = ts.do(req{method: "GET", path: "/admin/students?q=smith&per=1", ip: staffIP, cookie: teach}).Body.String()
+	if !strings.Contains(body, `href="/admin/students?dir=asc&amp;page=2&amp;per=1&amp;q=smith&amp;sort=group"`) {
+		t.Error("page 2 link lost the search")
+	}
+	if !strings.Contains(body, `href="/admin/students.csv?dir=asc&amp;q=smith&amp;sort=group"`) {
+		t.Error("export link lost the search")
+	}
+
+	csvOf := func(q string) string {
+		t.Helper()
+		w := ts.do(req{method: "GET", path: "/admin/students.csv?" + q, ip: staffIP, cookie: teach})
+		if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/csv") ||
+			w.Header().Get("Content-Disposition") != `attachment; filename="students-2026-03-10.csv"` {
+			t.Fatalf("%s: %d %v", q, w.Code, w.Header())
+		}
+		return w.Body.String()
+	}
+	// Every row (no paging), in the list's order. The Telegram column: the
+	// @username, or the display name for an account without one, or empty.
+	want := "\ufeffname,group,login,telegram\n" +
+		"Ёлкина Мария,A,,\n" +
+		"Нұрланов Ерлан,A,nerlan,@erlan_n\n" +
+		"Smithson Bob,A,bsmith,\n" +
+		"Smith Anna,B,asmith,Anna S\n"
+	if got := csvOf("per=1&page=2"); got != want {
+		t.Errorf("CSV:\n%q\nwant\n%q", got, want)
+	}
+	if got := csvOf("q=smith&tg=linked"); got != "\ufeffname,group,login,telegram\nSmith Anna,B,asmith,Anna S\n" {
+		t.Errorf("filtered CSV:\n%q", got)
+	}
+	if got := csvOf("sort=name&dir=desc&group=A"); got != "\ufeffname,group,login,telegram\nSmithson Bob,A,bsmith,\nНұрланов Ерлан,A,nerlan,@erlan_n\nЁлкина Мария,A,,\n" {
+		t.Errorf("sorted CSV:\n%q", got)
+	}
+	// Archived students only with archived=1, as on the page.
+	core.SetArchived(ctx, ts.s.DB, ts.now, 4, true, "test")
+	if got := csvOf("q=smith"); got != "\ufeffname,group,login,telegram\nSmith Anna,B,asmith,Anna S\n" {
+		t.Errorf("CSV with an archived student:\n%q", got)
+	}
+	if got := csvOf("q=smith&archived=1"); got != "\ufeffname,group,login,telegram\nSmithson Bob,A,bsmith,\n" {
+		t.Errorf("archived CSV:\n%q", got)
+	}
+}
+
 func TestReturnTo(t *testing.T) {
 	cases := map[string]string{
-		"/admin/new/students/3?period=month&date=2026-03-01": "/admin/new/students/3?period=month&date=2026-03-01",
-		"":                                "/fallback",
-		"https://evil.example/x":          "/fallback",
-		"//evil.example/admin/":           "/fallback",
-		"/qr":                             "/fallback",
-		"/admin/new/x\r\nSet-Cookie: a=b": "/fallback",
-		"/admin\\..\\x":                   "/fallback",
-		"javascript:alert(1)":             "/fallback",
+		"/admin/students/3?period=month&date=2026-03-01": "/admin/students/3?period=month&date=2026-03-01",
+		"":                            "/fallback",
+		"https://evil.example/x":      "/fallback",
+		"//evil.example/admin/":       "/fallback",
+		"/qr":                         "/fallback",
+		"/admin/x\r\nSet-Cookie: a=b": "/fallback",
+		"/admin\\..\\x":               "/fallback",
+		"javascript:alert(1)":         "/fallback",
 	}
 	for in, want := range cases {
 		r := httptest.NewRequest("POST", "/", strings.NewReader(url.Values{"return": {in}}.Encode()))
@@ -671,7 +805,7 @@ func TestReturnTo(t *testing.T) {
 	}
 }
 
-func TestNewUIActionsReturn(t *testing.T) {
+func TestActionsReturn(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	core.AddStudent(ctx, ts.s.DB, ts.now, "Alice", "A", "test")
@@ -684,24 +818,24 @@ func TestNewUIActionsReturn(t *testing.T) {
 		}
 		return w.Header().Get("Location")
 	}
-	if got := post("/admin/students/1/edit", url.Values{"name": {"Alice B"}, "return": {"/admin/new/students/1"}}); got != "/admin/new/students/1" {
-		t.Errorf("edit from the new UI went to %s", got)
+	if got := post("/admin/students/1/edit", url.Values{"name": {"Alice B"}, "return": {"/admin/students/1?period=week"}}); got != "/admin/students/1?period=week" {
+		t.Errorf("edit went to %s", got)
 	}
 	if got := post("/admin/students/1/edit", url.Values{"name": {"Alice C"}, "return": {"https://evil.example/"}}); got != "/admin/students/1" {
 		t.Errorf("edit with a foreign return went to %s", got)
 	}
 	if got := post("/admin/students/1/edit", url.Values{"name": {"Alice D"}}); got != "/admin/students/1" {
-		t.Errorf("edit from the old UI went to %s", got)
+		t.Errorf("edit without a return went to %s", got)
 	}
-	if got := post("/admin/students/1/code", url.Values{"ui": {"new"}}); got != "/admin/new/students/slips?id=1" {
-		t.Errorf("new link from the new UI went to %s", got)
+	if got := post("/admin/students/1/code", url.Values{}); got != "/admin/students/slips?id=1" {
+		t.Errorf("new link went to %s", got)
 	}
-	if got := post("/admin/students/codes", url.Values{"ui": {"new"}, "group": {"A"}}); got != "/admin/new/students/slips?group=A" {
-		t.Errorf("bulk links from the new UI went to %s", got)
+	if got := post("/admin/students/codes", url.Values{"group": {"A"}}); got != "/admin/students/slips?group=A" {
+		t.Errorf("bulk links went to %s", got)
 	}
 }
 
-func TestNewJournalPaging(t *testing.T) {
+func TestJournalPaging(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	for i := 1; i <= 5; i++ { // five audit entries, "add_student" for Student1..Student5
@@ -710,7 +844,7 @@ func TestNewJournalPaging(t *testing.T) {
 	}
 	admin, _ := ts.login("boss") // the login is not audited
 	targets := func(q string) string {
-		w := ts.do(req{method: "GET", path: "/admin/new/journal?" + q, ip: staffIP, cookie: admin})
+		w := ts.do(req{method: "GET", path: "/admin/journal?" + q, ip: staffIP, cookie: admin})
 		var out []string
 		for _, m := range regexp.MustCompile(`>student:(\d+)</a>`).FindAllStringSubmatch(w.Body.String(), -1) {
 			out = append(out, m[1])
@@ -725,7 +859,7 @@ func TestNewJournalPaging(t *testing.T) {
 		}
 	}
 	// Past the end: the last page.
-	w := ts.do(req{method: "GET", path: "/admin/new/journal?per=2&page=7", ip: staffIP, cookie: admin})
+	w := ts.do(req{method: "GET", path: "/admin/journal?per=2&page=7", ip: staffIP, cookie: admin})
 	if !strings.Contains(w.Body.String(), i18n.T(ts.s.Cfg.Lang, "dash.shown", 7, 7, 7)) {
 		t.Error("page 7 of 4 should show the last page")
 	}
@@ -743,7 +877,7 @@ func TestNewJournalPaging(t *testing.T) {
 //     limit) that was still the one on screen → only in "old code".
 //
 // Old-code list, newest check-in first: Bob (03-10 07:00), Carol (03-09 20:00).
-func TestNewAnomalies(t *testing.T) {
+func TestAnomalies(t *testing.T) {
 	ts := newTestServer(t)
 	ctx := context.Background()
 	e := ts.s.Engine
@@ -810,7 +944,7 @@ func TestNewAnomalies(t *testing.T) {
 	}
 	e.AgentEvent(ctx, end, "PC-02", core.KindLogout, "s3", ms(0))
 
-	r := httptest.NewRequest("GET", "/admin/new/anomalies?from=2026-03-09&to=2026-03-10", nil)
+	r := httptest.NewRequest("GET", "/admin/anomalies?from=2026-03-09&to=2026-03-10", nil)
 	d, err := ts.s.newAnomalies(r)
 	if err != nil {
 		t.Fatal(err)
@@ -839,7 +973,7 @@ func TestNewAnomalies(t *testing.T) {
 		t.Errorf("Bob's flags: %v", d.Multi[0].Flags)
 	}
 	admin, _ := ts.login("boss")
-	if w := ts.do(req{method: "GET", path: "/admin/new/anomalies?from=2026-03-09&to=2026-03-10", ip: staffIP, cookie: admin}); w.Code != 200 ||
+	if w := ts.do(req{method: "GET", path: "/admin/anomalies?from=2026-03-09&to=2026-03-10", ip: staffIP, cookie: admin}); w.Code != 200 ||
 		!strings.Contains(w.Body.String(), ">Bob</a>") {
 		t.Errorf("anomalies page: %d", w.Code)
 	}
@@ -989,9 +1123,102 @@ func TestDashboardDateRanges(t *testing.T) {
 	}
 }
 
+// The lists about check-ins and PC sessions, through the real path. On
+// 2026-03-10, PCs heartbeat every minute from their login to 09:00:
+//
+//	08:00 PC-01 login, 08:01 Dave scans on PC-01
+//	08:05 PC-02 login, 08:06 Dave scans on PC-02 (5 min later, PC-01 still
+//	      in use until 09:00) → one student on several PCs
+//	08:20 Eve scans on PC-01 → Dave and Eve in one PC-01 session
+//	08:30 a Telegram account that is not linked scans on PC-01 → failed scan
+//	09:01 the nightly cleanup closes Eve (PC-01) and Dave (PC-02) at 09:00
+//	      → auto-closed, newest check-in first: Eve, Dave
+func TestScanAnomalies(t *testing.T) {
+	ts := newTestServer(t)
+	ctx := context.Background()
+	e := ts.s.Engine
+	at := func(hm string) time.Time {
+		v, _ := time.ParseInLocation("2006-01-02 15:04", "2026-03-10 "+hm, ts.s.Cfg.Timezone)
+		return v
+	}
+	for i, name := range []string{"Dave", "Eve"} {
+		id, _ := core.AddStudent(ctx, ts.s.DB, ts.now, name, "A", "test")
+		code, _ := core.GenerateCode(ctx, ts.s.DB, ts.now, id, time.Hour, "test")
+		core.Enroll(ctx, ts.s.DB, ts.now, core.TGUser{ID: int64(504 + i)}, code)
+	}
+	type step struct {
+		at time.Time
+		do func()
+	}
+	var steps []step
+	idle := sql.NullInt64{Int64: 0, Valid: true}
+	pcSession := func(pc, sid, from string) {
+		start := at(from)
+		steps = append(steps, step{start, func() { e.AgentEvent(ctx, start, pc, core.KindSessionStart, sid, sql.NullInt64{}) }})
+		for tm := start.Add(time.Minute); !tm.After(at("09:00")); tm = tm.Add(time.Minute) {
+			steps = append(steps, step{tm, func() { e.AgentEvent(ctx, tm, pc, core.KindHeartbeat, sid, idle) }})
+		}
+	}
+	scan := func(hm, pc string, tg int64, want string) {
+		tm := at(hm)
+		steps = append(steps, step{tm.Add(time.Second), func() {
+			h, _ := ts.s.Hosts.ByName(pc)
+			tok, _ := ts.s.Board.Current(h.ID, tm.Add(-5*time.Second))
+			if r, err := ts.s.Checkin.Scan(ctx, tm.Add(time.Second), tg, tok); err != nil || r.Result != want {
+				t.Fatalf("scan at %s on %s: %v %+v", hm, pc, err, r)
+			}
+		}})
+	}
+	pcSession("PC-01", "a", "08:00")
+	pcSession("PC-02", "b", "08:05")
+	scan("08:01", "PC-01", 504, core.ScanOK)
+	scan("08:06", "PC-02", 504, core.ScanOK)
+	scan("08:20", "PC-01", 505, core.ScanOK)
+	scan("08:30", "PC-01", 999, core.ScanNotLinked)
+	steps = append(steps, step{at("09:01"), func() { e.Cleanup(ctx, at("09:01")) }})
+	sort.SliceStable(steps, func(i, j int) bool { return steps[i].at.Before(steps[j].at) })
+	for _, st := range steps {
+		st.do()
+	}
+
+	d, err := ts.s.scanAnomalies(ctx, at("00:00"), at("00:00").AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Multi) != 1 || d.Multi[0].Student.Name != "Dave" || d.Multi[0].FirstHost != "PC-01" || d.Multi[0].SecondHost != "PC-02" ||
+		!d.Multi[0].FirstActiveUntil.Equal(at("09:00")) {
+		t.Errorf("several PCs: %+v", d.Multi)
+	}
+	if len(d.Many) != 1 || d.Many[0].Host != "PC-01" || !d.Many[0].Started.Equal(at("08:00")) || len(d.Many[0].Students) != 2 {
+		t.Errorf("several students: %+v", d.Many)
+	} else if got := d.Many[0].Students; !(got[0] == "Dave" && got[1] == "Eve" || got[0] == "Eve" && got[1] == "Dave") {
+		t.Errorf("several students: %v", got)
+	}
+	if len(d.Auto) != 2 || d.Auto[0].Student.Name != "Eve" || d.Auto[1].Student.Name != "Dave" || !d.Auto[0].End.Equal(at("09:00")) {
+		t.Errorf("auto-closed: %+v", d.Auto)
+	}
+	if len(d.Failed) != 1 || d.Failed[0].TGUser != 999 || d.Failed[0].Result != core.ScanNotLinked || d.Failed[0].Host != "PC-01" {
+		t.Errorf("failed scans: %+v", d.Failed)
+	}
+	// Another day: nothing.
+	if d, _ := ts.s.scanAnomalies(ctx, at("00:00").AddDate(0, 0, 1), at("00:00").AddDate(0, 0, 2)); len(d.Multi)+len(d.Many)+len(d.Auto)+len(d.Failed) != 0 {
+		t.Errorf("next day: %+v", d)
+	}
+	// The Anomalies tab shows all four lists.
+	admin, _ := ts.login("boss")
+	body := ts.do(req{method: "GET", path: "/admin/anomalies?from=2026-03-10&to=2026-03-10", ip: staffIP, cookie: admin}).Body.String()
+	lang := ts.s.Cfg.Lang
+	for _, want := range []string{i18n.T(lang, "anom.multi_pc"), i18n.T(lang, "anom.many"), i18n.T(lang, "anom.auto"), i18n.T(lang, "anom.failed"),
+		"ID 999", html.EscapeString(i18n.T(lang, "scan.not_linked")), "PC-01 2026-03-10 08:01"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("anomalies page lacks %q", want)
+		}
+	}
+}
+
 func TestAnomaliesDefaultToThisWeek(t *testing.T) {
 	ts := newTestServer(t)
-	d, err := ts.s.newAnomalies(httptest.NewRequest("GET", "/admin/new/anomalies", nil))
+	d, err := ts.s.newAnomalies(httptest.NewRequest("GET", "/admin/anomalies", nil))
 	if err != nil {
 		t.Fatal(err)
 	}

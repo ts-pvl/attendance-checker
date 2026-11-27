@@ -127,11 +127,11 @@ func TestPlatformWeb(t *testing.T) {
 	}
 
 	// The address comes from the configuration: shown, never asked for.
-	if b := get(admin, "/admin/new/platform"); !strings.Contains(b, "Save the access token under Settings to start.") ||
+	if b := get(admin, "/admin/platform"); !strings.Contains(b, "Save the access token under Settings to start.") ||
 		!strings.Contains(b, `action="/admin/platform/settings"`) || !strings.Contains(b, srv.URL) || strings.Contains(b, `name="url"`) {
 		t.Error("platform page before setup")
 	}
-	if b := get(teach, "/admin/new/platform"); strings.Contains(b, "/admin/platform/") {
+	if b := get(teach, "/admin/platform"); strings.Contains(b, "/admin/platform/") {
 		t.Error("teacher sees platform actions")
 	}
 	for _, p := range []string{"/admin/platform/settings", "/admin/platform/sync", "/admin/platform/link", "/admin/platform/event"} {
@@ -151,7 +151,7 @@ func TestPlatformWeb(t *testing.T) {
 
 	// Students, the first with a login from the start (the new UI's form).
 	add := func(name, group, login string) (string, bool) {
-		return flashOf(post(admin, csrf, "/admin/students/add", url.Values{"name": {name}, "group": {group}, "login": {login}, "return": {"/admin/new/students"}}))
+		return flashOf(post(admin, csrf, "/admin/students/add", url.Values{"name": {name}, "group": {group}, "login": {login}, "return": {"/admin/students"}}))
 	}
 	if msg, isErr := add("Alice", "A", "JDOE"); isErr {
 		t.Fatalf("add with a login: %q", msg)
@@ -169,7 +169,7 @@ func TestPlatformWeb(t *testing.T) {
 	if n != 3 {
 		t.Errorf("%d students, want 3: a refused login still added one", n)
 	}
-	for _, page := range []string{"/admin/new/students", "/admin/students"} {
+	for _, page := range []string{"/admin/students", "/admin/students"} {
 		if b := get(admin, page); !strings.Contains(b, `name="login"`) {
 			t.Errorf("%s: no login field in the add form", page)
 		}
@@ -196,7 +196,7 @@ func TestPlatformWeb(t *testing.T) {
 	if msg, isErr := flashOf(post(admin, csrf, "/admin/platform/sync", url.Values{})); isErr || msg != "Synced: 1 platform users, 1 students linked." {
 		t.Errorf("sync: %q %v", msg, isErr)
 	}
-	body := get(admin, "/admin/new/platform")
+	body := get(admin, "/admin/platform")
 	for _, want := range []string{"the students&#39; logins are read", `<span class="mono">piscinego</span>`, `name="load" value="1"`, "Load all participants",
 		`<td class="mono">jdoe</td>`, `<td class="num">5</td>`, `title="500">500 B</td>`, "Ivan Petrov"} {
 		if !strings.Contains(body, want) {
@@ -211,25 +211,25 @@ func TestPlatformWeb(t *testing.T) {
 	if msg, isErr := flashOf(post(admin, csrf, "/admin/platform/sync", url.Values{})); isErr || msg != "Synced: 2 platform users, 1 students linked." {
 		t.Errorf("sync with event 10: %q %v", msg, isErr)
 	}
-	body = get(admin, "/admin/new/platform")
+	body = get(admin, "/admin/platform")
 	if strings.Contains(body, token) {
 		t.Fatal("the token is on the page")
 	}
 	for _, want := range []string{"access token saved", "events 10", "2 platform users · students linked: 1 · logins not on the platform: 0 · students without a login: 2",
-		`<a class="name" href="/admin/new/students/1">Alice B</a>`, "Not linked to a student (1)", "Stop loading all", "all participants", "1.10"} {
+		`<a class="name" href="/admin/students/1">Alice B</a>`, "Not linked to a student (1)", "Stop loading all", "all participants", "1.10"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("platform page (event) lacks %q", want)
 		}
 	}
-	if b := get(admin, "/admin/new/platform?show=unlinked"); strings.Contains(b, `<td class="mono">jdoe</td>`) || !strings.Contains(b, `<td class="mono">asmith</td>`) {
+	if b := get(admin, "/admin/platform?show=unlinked"); strings.Contains(b, `<td class="mono">jdoe</td>`) || !strings.Contains(b, `<td class="mono">asmith</td>`) {
 		t.Error("unlinked filter")
 	}
 	for _, key := range []string{"xp", "level"} {
-		if b := get(admin, "/admin/new/platform?sort="+key); strings.Index(b, ">jdoe<") > strings.Index(b, ">asmith<") {
+		if b := get(admin, "/admin/platform?sort="+key); strings.Index(b, ">jdoe<") > strings.Index(b, ">asmith<") {
 			t.Errorf("%s sort: the highest first", key)
 		}
 	}
-	b := get(teach, "/admin/new/students/1")
+	b := get(teach, "/admin/students/1")
 	for _, want := range []string{"On the learning platform", `<div class="k-value">5</div>`, `title="500">500 B</div>`, "Петров Иван", "Ivan Petrov",
 		`<span class="pill">current</span>`, "2026-03-02 – 2026-03-27"} {
 		if !strings.Contains(b, want) {
@@ -239,13 +239,13 @@ func TestPlatformWeb(t *testing.T) {
 	if strings.Contains(b, "/admin/platform/sync") {
 		t.Error("a teacher sees Sync now on the student page")
 	}
-	if b := get(admin, "/admin/new/students/1"); !strings.Contains(b, `action="/admin/platform/sync"`) {
+	if b := get(admin, "/admin/students/1"); !strings.Contains(b, `action="/admin/platform/sync"`) {
 		t.Error("an admin has no Sync now on the student page")
 	}
-	if b := get(admin, "/admin/new/students/3"); !strings.Contains(b, "No platform login yet") {
+	if b := get(admin, "/admin/students/3"); !strings.Contains(b, "No platform login yet") {
 		t.Error("student without a login")
 	}
-	if b := get(admin, "/admin/new/students?sort=login"); !strings.Contains(b, `<td class="mono">JDOE</td>`) {
+	if b := get(admin, "/admin/students?sort=login"); !strings.Contains(b, `<td class="mono">JDOE</td>`) {
 		t.Error("login column in the students list")
 	}
 
@@ -259,7 +259,7 @@ func TestPlatformWeb(t *testing.T) {
 	// A login the platform does not know.
 	post(admin, csrf, "/admin/students/3/edit", url.Values{"name": {"Bob"}, "group": {"A"}, "login": {"nobody1"}})
 	post(admin, csrf, "/admin/platform/sync", url.Values{})
-	if b := get(admin, "/admin/new/students/3"); !strings.Contains(b, "The login nobody1 was not found on the platform at the last sync") {
+	if b := get(admin, "/admin/students/3"); !strings.Contains(b, "The login nobody1 was not found on the platform at the last sync") {
 		t.Error("unknown login on the student page")
 	}
 	var journal string
@@ -291,13 +291,13 @@ func TestPlatformWeb(t *testing.T) {
 	if msg, isErr := flashOf(post(admin, csrf, "/admin/platform/sync", url.Values{})); !isErr || !strings.Contains(msg, "HTTP 401") || strings.Contains(msg, "wrongwrongwrong") {
 		t.Errorf("wrong token: %q", msg)
 	}
-	if b := get(admin, "/admin/new/platform"); !strings.Contains(b, "failed: token request: HTTP 401") || strings.Contains(b, "wrongwrongwrong") {
+	if b := get(admin, "/admin/platform"); !strings.Contains(b, "failed: token request: HTTP 401") || strings.Contains(b, "wrongwrongwrong") {
 		t.Error("the last error is not shown, or shows the token")
 	}
 
 	// No platform_url: nothing can sync.
 	ts.s.Cfg.PlatformURL, ts.s.Platform = "", nil
-	if b := get(admin, "/admin/new/platform"); !strings.Contains(b, "platform_url") {
+	if b := get(admin, "/admin/platform"); !strings.Contains(b, "platform_url") {
 		t.Error("an empty platform_url is not explained")
 	}
 }

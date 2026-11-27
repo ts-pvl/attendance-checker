@@ -115,7 +115,7 @@ func todayScenario(t *testing.T) *testServer {
 	return ts
 }
 
-func TestNewToday(t *testing.T) {
+func TestToday(t *testing.T) {
 	ts := todayScenario(t)
 	ctx := context.Background()
 	h, m := time.Hour, time.Minute
@@ -129,21 +129,45 @@ func TestNewToday(t *testing.T) {
 		t.Fatalf("grid: %d rows, custom %v", len(d.Rows), d.Custom)
 	}
 	want := []pcTile{
-		{Index: 0, Host: "PC-01", State: pcBusy, StudentID: 1, Student: "Alice", For: 1*h + 55*m},
-		{Index: 1, Host: "PC-02", State: pcLogin, For: 30 * m},
+		{Index: 0, Host: "PC-01", State: pcBusy, StudentID: 1, Student: "Alice", For: 1*h + 55*m, LastSeen: ts.now},
+		{Index: 1, Host: "PC-02", State: pcLogin, For: 30 * m, LastSeen: ts.now},
 		{Index: 2, Host: "PC-03", State: pcFree, For: 45 * m, Known: true},
 		{Index: 3, Host: "PC-04", State: pcFree, For: 9*h + 30*m, Known: true},
 		{Index: 4, Host: "PC-05", State: pcFree},
 		{Index: 5},
 	}
 	for i, w := range want {
-		if got := d.Rows[0][i]; got != w {
+		got := d.Rows[0][i]
+		if !got.LastSeen.Equal(w.LastSeen) {
+			t.Errorf("cell %d: last seen %v, want %v", i, got.LastSeen, w.LastSeen)
+		}
+		got.LastSeen, w.LastSeen = time.Time{}, time.Time{}
+		if got != w {
 			t.Errorf("cell %d: %+v, want %+v", i, got, w)
 		}
 	}
 	if d.Rows[4][9] != (pcTile{Index: 49}) {
 		t.Errorf("last cell: %+v", d.Rows[4][9])
 	}
+
+	// System status at 10:00: PC heartbeats up to 10:00, Alice's check-in at
+	// 08:05 is the last one and the only open visit; no PC is late.
+	loc := ts.s.Cfg.Timezone
+	scan, _ := time.ParseInLocation("2006-01-02 15:04", "2026-03-10 08:05", loc)
+	if st := d.Status; !st.LastHeartbeat.Equal(ts.now) || !st.LastScan.Equal(scan) || st.OpenVisits != 1 || st.Stale != 0 || st.Bot != nil {
+		t.Errorf("status: %+v", st)
+	}
+	// Three minutes without a heartbeat (more than 2 min 30 s): both PCs in
+	// use are flagged; free PCs never are.
+	ts.now = ts.now.Add(3 * m)
+	late, err := ts.s.newToday(ctx, parseRecentOpts(url.Values{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := late.Rows[0]; !r[0].Stale || !r[1].Stale || r[2].Stale || r[4].Stale || late.Status.Stale != 2 {
+		t.Errorf("late PCs: %+v, status %+v", r[:5], late.Status)
+	}
+	ts.now = ts.now.Add(-3 * m)
 	if d.Busy != 1 || d.NoCheckin != 1 || d.Free != 3 {
 		t.Errorf("busy %d, no check-in %d, free %d; want 1, 1, 3", d.Busy, d.NoCheckin, d.Free)
 	}
@@ -178,7 +202,7 @@ func TestNewToday(t *testing.T) {
 			}
 		}
 	}
-	if v.Self != "/admin/new/today" || v.Pager.Total != 3 || len(v.Pager.Links) != 0 {
+	if v.Self != "/admin/today" || v.Pager.Total != 3 || len(v.Pager.Links) != 0 {
 		t.Errorf("default view: self %q, total %d", v.Self, v.Pager.Total)
 	}
 	for query, want := range map[string]string{
@@ -200,8 +224,8 @@ func TestNewToday(t *testing.T) {
 			t.Errorf("%s: %s, want %s", query, got, want)
 		}
 	}
-	if _, v := list("per=2&page=2&group=&sort=len&dir=asc"); v.Self != "/admin/new/today?dir=asc&page=2&per=2&sort=len" ||
-		v.Pager.Prev != "/admin/new/today?dir=asc&per=2&sort=len" || v.Pager.Next != "" || v.Pager.First != 3 || v.Pager.Last != 3 {
+	if _, v := list("per=2&page=2&group=&sort=len&dir=asc"); v.Self != "/admin/today?dir=asc&page=2&per=2&sort=len" ||
+		v.Pager.Prev != "/admin/today?dir=asc&per=2&sort=len" || v.Pager.Next != "" || v.Pager.First != 3 || v.Pager.Last != 3 {
 		t.Errorf("page 2 of 2: self %q, pager %+v", v.Self, v.Pager)
 	}
 	// The column heads: PC, length and elapsed time sort; the active one flips.
@@ -210,8 +234,8 @@ func TestNewToday(t *testing.T) {
 	for _, hd := range v.Heads {
 		heads[hd.Key] = hd
 	}
-	if len(v.Heads) != 5 || heads["len"].Sort != "descending" || heads["len"].URL != "/admin/new/today?dir=asc&sort=len" ||
-		heads["pc"].URL != "/admin/new/today?dir=asc&sort=pc" || heads["pc"].Sort != "" || heads["ago"].URL != "/admin/new/today" {
+	if len(v.Heads) != 6 || heads["len"].Sort != "descending" || heads["len"].URL != "/admin/today?dir=asc&sort=len" ||
+		heads["pc"].URL != "/admin/today?dir=asc&sort=pc" || heads["pc"].Sort != "" || heads["ago"].URL != "/admin/today" {
 		t.Errorf("heads: %+v", v.Heads)
 	}
 	// A group with no session today, and a visit deleted by staff.
@@ -241,7 +265,7 @@ func TestNewToday(t *testing.T) {
 }
 
 // At 00:10 the next day nothing has ended "today" yet.
-func TestNewTodayIsTheLocalDay(t *testing.T) {
+func TestTodayIsTheLocalDay(t *testing.T) {
 	ts := todayScenario(t)
 	ts.now = time.Date(2026, 3, 11, 0, 10, 0, 0, ts.s.Cfg.Timezone)
 	d, err := ts.s.newToday(context.Background(), parseRecentOpts(url.Values{}))
@@ -253,9 +277,9 @@ func TestNewTodayIsTheLocalDay(t *testing.T) {
 	}
 }
 
-func TestNewTodayPage(t *testing.T) {
+func TestTodayPage(t *testing.T) {
 	ts := todayScenario(t)
-	if w := ts.do(req{method: "GET", path: "/admin/new/today", ip: staffIP}); w.Code != http.StatusSeeOther {
+	if w := ts.do(req{method: "GET", path: "/admin/today", ip: staffIP}); w.Code != http.StatusSeeOther {
 		t.Errorf("without login: %d", w.Code)
 	}
 	admin, csrf := ts.login("boss")
@@ -275,14 +299,14 @@ func TestNewTodayPage(t *testing.T) {
 		}
 		return strings.Join(out, " ")
 	}
-	body := page(admin, "/admin/new/today")
+	body := page(admin, "/admin/today")
 	for _, want := range []string{
 		`aria-current="page">Today</a>`, `<script src="/static/today.js" defer></script>`,
 		"With a student: 1 · logged in without a check-in: 1 · free: 3",
-		`<div class="pc busy" draggable="true" data-host="PC-01">`, `href="/admin/new/students/1"`, "1 h 55 min",
+		`<div class="pc busy" draggable="true" data-host="PC-01">`, `href="/admin/students/1"`, "1 h 55 min",
 		`<div class="pc login" draggable="true" data-host="PC-02">`, "30 min",
 		"9 h 30 min", "no sessions yet",
-		`hx-get="/admin/new/today" hx-trigger="every 30s"`,
+		`hx-get="/admin/today" hx-trigger="every 30s"`,
 		`45 min ago <small class="muted">09:15</small>`, "2 h 05 min",
 	} {
 		if !strings.Contains(body, want) {
@@ -299,20 +323,20 @@ func TestNewTodayPage(t *testing.T) {
 		t.Error("inline style or script on the page")
 	}
 	// The reload address carries the table settings.
-	if b := page(admin, "/admin/new/today?sort=pc&group=B&per=10"); !strings.Contains(b, `hx-get="/admin/new/today?group=B&amp;per=10&amp;sort=pc&amp;dir=asc"`) &&
-		!strings.Contains(b, `hx-get="/admin/new/today?dir=asc&amp;group=B&amp;per=10&amp;sort=pc"`) {
+	if b := page(admin, "/admin/today?sort=pc&group=B&per=10"); !strings.Contains(b, `hx-get="/admin/today?group=B&amp;per=10&amp;sort=pc&amp;dir=asc"`) &&
+		!strings.Contains(b, `hx-get="/admin/today?dir=asc&amp;group=B&amp;per=10&amp;sort=pc"`) {
 		t.Error("the reload address lost the table settings")
 	}
 	// Teachers see the page but cannot change the grid.
-	tb := page(teach, "/admin/new/today")
-	if strings.Contains(tb, "draggable=\"true\"") || strings.Contains(tb, "/admin/new/today/layout") || !strings.Contains(tb, `<div class="pc busy">`) {
+	tb := page(teach, "/admin/today")
+	if strings.Contains(tb, "draggable=\"true\"") || strings.Contains(tb, "/admin/today/layout") || !strings.Contains(tb, `<div class="pc busy">`) {
 		t.Error("teacher view: grid controls shown or tiles missing")
 	}
 	post := func(c *http.Cookie, token string, form url.Values) int {
 		if token != "" {
 			form.Set("csrf", token)
 		}
-		return ts.do(req{method: "POST", path: "/admin/new/today/layout", ip: staffIP, cookie: c, form: form}).Code
+		return ts.do(req{method: "POST", path: "/admin/today/layout", ip: staffIP, cookie: c, form: form}).Code
 	}
 	if code := post(teach, teachCSRF, url.Values{"action": {"reset"}}); code != http.StatusForbidden {
 		t.Errorf("teacher changes the grid: %d", code)
@@ -325,11 +349,11 @@ func TestNewTodayPage(t *testing.T) {
 	if code := post(admin, csrf, url.Values{"action": {"swap"}, "host": {"PC-01"}, "to": {"2"}}); code != http.StatusSeeOther {
 		t.Fatalf("swap: %d", code)
 	}
-	if got := order(page(admin, "/admin/new/today")); got != "PC-03 PC-02 PC-01 PC-04 PC-05" {
+	if got := order(page(admin, "/admin/today")); got != "PC-03 PC-02 PC-01 PC-04 PC-05" {
 		t.Errorf("after the swap: %s", got)
 	}
 	post(admin, csrf, url.Values{"action": {"swap"}, "host": {"PC-05"}, "to": {"12"}})
-	body = page(admin, "/admin/new/today")
+	body = page(admin, "/admin/today")
 	if got := order(body); got != "PC-03 PC-02 PC-01 PC-04 PC-05" || !strings.Contains(body, `<div class="pccell empty" data-cell="4">`) ||
 		!regexp.MustCompile(`<div class="pccell" data-cell="12">\s*<div class="pc free" draggable="true" data-host="PC-05">`).MatchString(body) {
 		t.Errorf("after the move: %s", got)
@@ -338,12 +362,12 @@ func TestNewTodayPage(t *testing.T) {
 	// 12 (second row, third column). PC-03, PC-02, PC-01 and PC-05 are inside
 	// the new grid and stay; PC-04 (fourth column) takes the first empty cell:
 	//   PC-03 PC-02 PC-01 / PC-04 _ PC-05
-	w := ts.do(req{method: "POST", path: "/admin/new/today/layout", ip: staffIP, cookie: admin,
-		form: url.Values{"csrf": {csrf}, "action": {"resize"}, "rows": {"2"}, "cols": {"3"}, "return": {"/admin/new/today?sort=pc"}}})
-	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/new/today?sort=pc" {
+	w := ts.do(req{method: "POST", path: "/admin/today/layout", ip: staffIP, cookie: admin,
+		form: url.Values{"csrf": {csrf}, "action": {"resize"}, "rows": {"2"}, "cols": {"3"}, "return": {"/admin/today?sort=pc"}}})
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/admin/today?sort=pc" {
 		t.Errorf("resize: %d to %s", w.Code, w.Header().Get("Location"))
 	}
-	body = page(admin, "/admin/new/today")
+	body = page(admin, "/admin/today")
 	if got := order(body); got != "PC-03 PC-02 PC-01 PC-04 PC-05" || strings.Count(body, `class="pcrow"`) != 2 || strings.Count(body, "data-cell=") != 6 ||
 		!strings.Contains(body, `<div class="pccell empty" data-cell="4">`) ||
 		!strings.Contains(body, `name="rows" min="1" max="30" value="2"`) || !strings.Contains(body, `name="cols" min="1" max="30" value="3"`) {
@@ -352,7 +376,7 @@ func TestNewTodayPage(t *testing.T) {
 	// 1 row of 2 cannot hold five PCs: PC-03 PC-02 stay, the others follow in
 	// added rows: PC-03 PC-02 / PC-01 PC-04 / PC-05 _.
 	post(admin, csrf, url.Values{"action": {"resize"}, "rows": {"1"}, "cols": {"2"}})
-	body = page(admin, "/admin/new/today")
+	body = page(admin, "/admin/today")
 	if got := order(body); got != "PC-03 PC-02 PC-01 PC-04 PC-05" || strings.Count(body, `class="pcrow"`) != 3 || !strings.Contains(body, `name="rows" min="1" max="30" value="1"`) {
 		t.Errorf("after 1x2: %s, %d rows", got, strings.Count(body, `class="pcrow"`))
 	}
@@ -371,12 +395,12 @@ func TestNewTodayPage(t *testing.T) {
 			t.Errorf("%v: %d", f, code)
 		}
 	}
-	if got := order(page(admin, "/admin/new/today")); got != "PC-03 PC-02 PC-01 PC-04 PC-05" {
+	if got := order(page(admin, "/admin/today")); got != "PC-03 PC-02 PC-01 PC-04 PC-05" {
 		t.Errorf("after refused changes: %s", got)
 	}
 	// Reset: back to 5 x 10 in name order.
 	post(admin, csrf, url.Values{"action": {"reset"}})
-	body = page(admin, "/admin/new/today")
+	body = page(admin, "/admin/today")
 	if got := order(body); got != "PC-01 PC-02 PC-03 PC-04 PC-05" || strings.Count(body, `class="pcrow"`) != 5 || strings.Contains(body, `id="pc-reset"`) {
 		t.Errorf("after reset: %s", got)
 	}

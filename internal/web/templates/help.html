@@ -3,7 +3,7 @@
 {{with .D}}
 <h1>{{t "help.title"}}</h1>
 <p class="sub">{{t "help.intro"}}</p>
-{{if .NoCohort}}<section class="card"><p><span class="pill warn">{{t "help.cohort_label"}}</span> {{t "help.no_cohort"}} <a href="/admin/new/platform">{{t "nav.platform"}}</a></p></section>{{end}}
+{{if .NoCohort}}<section class="card"><p><span class="pill warn">{{t "help.cohort_label"}}</span> {{t "help.no_cohort"}} <a href="/admin/platform">{{t "nav.platform"}}</a></p></section>{{end}}
 
 {{if $admin}}
 <section class="card">
@@ -24,7 +24,7 @@
 <section class="card">
   <div class="c-head">
     <h2>{{t "help.counts"}}</h2>
-    <form class="tools" method="get" action="/admin/new/help" data-autosubmit>
+    <form class="tools" method="get" action="/admin/help" data-autosubmit>
       <select name="week" aria-label="{{t "help.week"}}">
         {{range .Weeks}}<option value="{{.Week}}" {{if eq .Week $.D.Week}}selected{{end}}>{{t "help.week_label" .Week}}</option>{{end}}
         <option value="all" {{if eq .Week "all"}}selected{{end}}>{{t "help.all_weeks"}}</option>
@@ -49,7 +49,7 @@
     {{range .Rows}}
     <tr>
       <td class="mono">{{.Login}}</td>
-      <td>{{if .StudentID}}<a class="name" href="/admin/new/students/{{.StudentID}}">{{.Student}}</a>{{else}}{{.PlatformName}} <span class="pill">{{t "help.not_student"}}</span>{{end}}</td>
+      <td>{{if .StudentID}}<a class="name" href="/admin/students/{{.StudentID}}">{{.Student}}</a>{{else}}{{.PlatformName}} <span class="pill">{{t "help.not_student"}}</span>{{end}}</td>
       <td class="muted">{{.Group}}</td>
       {{if $.D.Current}}<td class="num">{{.Week}}</td>{{end}}
       <td class="num">{{.Total}}</td>

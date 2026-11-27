@@ -1,4 +1,4 @@
-// Analytics dashboard: theme switch and filters. Sorting, the group filter,
+// Admin UI: theme switch and filters. Sorting, the group filter,
 // search and paging of the students table happen on the server; htmx (see
 // the hx-* attributes) swaps in just the table. Without JavaScript the same
 // links and forms reload the page.
@@ -18,10 +18,10 @@
       try { localStorage.setItem('att-theme', next); } catch (err) { /* ignore */ }
       return;
     }
-    // After htmx changed the table the address bar has the current filters;
+    // After htmx changed a list the address bar has the current filters;
     // export exactly that (the server ignores the page).
     var csv = e.target.closest('a[data-csv]');
-    if (csv) csv.href = '/admin/dashboard.csv' + window.location.search;
+    if (csv) csv.href = csv.getAttribute('data-csv') + window.location.search;
   });
 
   // Filters apply as soon as a date, menu or checkbox changes. requestSubmit

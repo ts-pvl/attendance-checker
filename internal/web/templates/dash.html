@@ -89,7 +89,7 @@
         <input type="search" id="tbl-q" name="q" value="{{.Opts.Q}}" placeholder="{{t "dash.search"}}" aria-label="{{t "dash.search"}}" autocomplete="off">
         {{template "per-select" (perSelect "per" .PerOpts)}}
         <noscript><button class="btn">{{t "dash.show"}}</button></noscript>
-        <a class="btn" href="{{$d.CSV}}" data-csv>{{t "dash.export"}}</a>
+        <a class="btn" href="{{$d.CSV}}" data-csv="/admin/dashboard.csv">{{t "dash.export"}}</a>
       </form>
       {{end}}
     </div>
@@ -155,7 +155,7 @@
     <tbody>
     {{range .Rows}}
     <tr data-name="{{.Name}}">
-      <td><a class="name" href="/admin/new/students/{{.ID}}" hx-boost="false">{{.Name}}</a></td>
+      <td><a class="name" href="/admin/students/{{.ID}}" hx-boost="false">{{.Name}}</a></td>
       <td class="muted">{{.Group}}</td>
       <td>{{if .Active}}<span class="pill ok">● {{t "dash.st_active"}}</span>{{else}}<span class="pill gone">● {{t "dash.st_left"}}</span>{{end}}</td>
       <td class="num">{{.Hours}}</td>
